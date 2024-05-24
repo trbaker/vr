@@ -1,21 +1,16 @@
 <!---  route traffic bsed on OS for AR object access  --->
-1
+
 <!DOCTYPE html>
 <html>
 <head>
 </head>
+<body  onload="operatingSytem()">
 
-<p>
-<button ondblclick="operatingSytem()">
-Return Operating System Name
-</button>
-</p>
-
+	
+<br /><br />
 <p style="background-color:yellow;width:200" id="OS"></p>
 
 <script>
-	window.alert("Hello world!");
-	alert("Hello world!");
 	function operatingSytem() {
 		let OSName = "Unknown OS";
 		if (navigator.appVersion.indexOf("Win") != -1) OSName = "Windows";
