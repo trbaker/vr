@@ -13,10 +13,6 @@ vs5.2
 <script>
 	function operatingSytem() {
 		let OSName = "Unknown OS";
-		if (/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream) {
-			OSName="iPad2";
-			alert("ipad found");
-		};
 		if (navigator.appVersion.indexOf("Win") != -1) OSName = "Windows";
 		if (navigator.appVersion.indexOf("Mac") != -1) OSName = "MacOS";
 		if (navigator.appVersion.indexOf("X11") != -1) OSName = "UNIX";
