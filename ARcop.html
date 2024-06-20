@@ -11,9 +11,9 @@ vs 5.4
 <p style="background-color:yellow;width:200" id="OS"></p>
 
 <script>
+	const iPad = (userAgent.match(/(iPad)/) /* iOS pre 13 */ || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) /* iPad OS 13 */);
+	alert(iPad);
 	function operatingSytem() {
-		const iPad = (userAgent.match(/(iPad)/) /* iOS pre 13 */ || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) /* iPad OS 13 */);
-		alert(iPad);
 		let OSName = "Unknown OS";
 		if (navigator.appVersion.indexOf("Win") != -1) OSName = "Windows";
 		if (navigator.appVersion.indexOf("iPad") != -1) OSName = "iPad";
