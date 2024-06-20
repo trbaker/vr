@@ -4,9 +4,9 @@
 <html>
 <head>
 </head>
-<body  onload="operatingSytem()">
+<body  onload="operatingSytem();pushPage();">
 
-vs 6
+vs 6.1
 <br /><br />
 <p style="background-color:yellow;width:200" id="OS"></p>
 
@@ -25,6 +25,14 @@ vs 6
 		// Display the OS name
 		document.getElementById("OS").innerHTML = OSName;
 	}
+	function pushPage() {
+		const queryString = window.location.search;
+		const urlParams = new URLSearchParams(queryString);
+		const t = urlParams.get('t')
+		window.location.href = "http://stackoverflow.com"+t;	
+	}
 </script>
+
+	
 </body>
 </html>
