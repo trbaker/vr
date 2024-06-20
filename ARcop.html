@@ -15,7 +15,6 @@ vs 5.7
 	alert(iPad);
 	function operatingSytem() {
 		let OSName = "Unknown OS";
-		if (navigator.appVersion.indexOf("Mac") != -1 && navigator.maxTouchPoints > 1) OSName = "MacOS2";
 		if (navigator.appVersion.indexOf("Win") != -1) OSName = "Windows";
 		if (navigator.appVersion.indexOf("iPadOS") != -1) OSName = "iPad";
 		if (navigator.appVersion.indexOf("Mac") != -1) OSName = "MacOS";
@@ -23,6 +22,7 @@ vs 5.7
 		if (navigator.appVersion.indexOf("Linux") != -1) OSName = "Linux";
 		if (navigator.appVersion.indexOf("iOS") != -1) OSName = "iOS";
 		if (navigator.appVersion.indexOf("iPhone") != -1) OSName = "iPhone";
+		if (navigator.appVersion.indexOf("Mac") != -1 && navigator.maxTouchPoints > 1) OSName = "MacOS2";
 		if (navigator.appVersion.indexOf("Android") != -1) OSName = "Android";
 		// Display the OS name
 		document.getElementById("OS").innerHTML = OSName;
