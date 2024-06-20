@@ -15,7 +15,7 @@ vs 5.6b
 	alert(iPad);
 	function operatingSytem() {
 		let OSName = "Unknown OS";
-		if (navigator.platform === 'MacIntel') OSName = "MacIntel";
+		if (navigator.appVersion.indexOf("Mac") != -1 && navigator.maxTouchPoints > 1) OSName = "MacOS2";
 		if (navigator.appVersion.indexOf("Win") != -1) OSName = "Windows";
 		if (navigator.appVersion.indexOf("iPadOS") != -1) OSName = "iPad";
 		if (navigator.appVersion.indexOf("Mac") != -1) OSName = "MacOS";
