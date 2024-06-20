@@ -6,7 +6,7 @@
 </head>
 <body  onload="operatingSytem();pushPage();">
 
-vs 6.3
+vs 6.4
 <br /><br />
 <p style="background-color:yellow;width:200" id="OS"></p>
 
@@ -20,16 +20,15 @@ vs 6.3
 		if (navigator.appVersion.indexOf("Linux") != -1) OSName = "Linux";
 		if (navigator.appVersion.indexOf("iOS") != -1) OSName = "iOS";
 		if (navigator.appVersion.indexOf("iPhone") != -1) OSName = "iPhone";
-		if (navigator.appVersion.indexOf("Mac") != -1 && navigator.maxTouchPoints > 1) OSName = "iPad";
+		if (navigator.appVersion.indexOf("Mac") != -1 && navigator.maxTouchPoints > 1) OSName = "iOS-All";
 		if (navigator.appVersion.indexOf("Android") != -1) OSName = "Android";
 		// Display the OS name
 		document.getElementById("OS").innerHTML = OSName;
-	}
-	function pushPage() {
+		//push to the new url
 		const queryString = window.location.search;
 		const urlParams = new URLSearchParams(queryString);
 		const t = urlParams.get('t')
-		window.location.href = "http://stackoverflow.com/"+ "//"+t+OSName;	
+		window.location.href = "http://stackoverflow.com/"+ "//"+t+OSName;			
 	}
 </script>
 
