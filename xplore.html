@@ -1,0 +1,1865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArcGIS VR Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { overflow:hidden; background:#000814; font-family:'Share Tech Mono',monospace; }
+
+/* Three.js canvas fills screen */
+#three-canvas {
+  position:fixed; inset:0; width:100%!important; height:100%!important; z-index:0;
+  display:block;
+}
+
+/* Loading */
+#loading { position:fixed; inset:0; background:#000814; z-index:9000;
+  display:flex; flex-direction:column; align-items:center;
+  justify-content:flex-start; padding-top:48px; transition:opacity .9s ease; }
+#loading.out { opacity:0; pointer-events:none; }
+.lgrid { position:absolute; inset:0; pointer-events:none;
+  background-image:linear-gradient(#00d4ff08 1px,transparent 1px),
+                   linear-gradient(90deg,#00d4ff08 1px,transparent 1px);
+  background-size:60px 60px; }
+.logo { font-family:'Orbitron',sans-serif; font-size:38px; font-weight:900;
+  color:#00d4ff; letter-spacing:10px; margin-bottom:4px;
+  animation:glow 2s ease-in-out infinite; }
+.sub  { font-size:9px; color:#00d4ff44; letter-spacing:5px; margin-bottom:28px; }
+.ltrack { width:320px; height:2px; background:#00d4ff1a; margin-bottom:8px; }
+.lfill  { height:2px; width:0%; background:#00d4ff; transition:width .3s ease; box-shadow:0 0 10px #00d4ff; }
+.lmsg { font-size:9px; color:#00d4ff66; letter-spacing:2px; margin-bottom:16px; height:14px; }
+@keyframes glow{0%,100%{text-shadow:0 0 16px #00d4ff55}50%{text-shadow:0 0 32px #00d4ffbb}}
+
+/* Boot console */
+#bcon { width:min(680px,92vw); display:flex; flex-direction:column;
+  background:rgba(0,5,16,.94); border:1px solid #00d4ff2a; }
+#bcon-hdr { display:flex; align-items:center; justify-content:space-between;
+  padding:6px 12px; background:rgba(0,212,255,.06); border-bottom:1px solid #00d4ff18; }
+.bdots { display:flex; gap:5px; }
+.bdot  { width:7px; height:7px; border-radius:50%; }
+.bdot.r{background:#ff4455} .bdot.y{background:#ffcc00}
+.bdot.g{background:#00ff99;animation:blink 1.4s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.btitle { font-size:8px; color:#00d4ff66; letter-spacing:3px; }
+#bstatus { font-size:8px; color:#00d4ff44; letter-spacing:2px; }
+#blog { height:230px; overflow-y:auto; padding:8px 12px;
+  display:flex; flex-direction:column; gap:1px; scroll-behavior:smooth; }
+.cl { font-size:10px; letter-spacing:.3px; line-height:1.65; white-space:pre-wrap; animation:cin .15s ease; }
+@keyframes cin{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}
+.cl.info{color:#00d4ffaa} .cl.ok{color:#00ffaacc}
+.cl.warn{color:#ffcc00bb} .cl.err{color:#ff5566cc} .cl.dim{color:#00d4ff22}
+#bftr { display:flex; align-items:center; gap:10px; padding:5px 12px; border-top:1px solid #00d4ff0d; }
+.bflbl{font-size:8px;color:#00d4ff33;letter-spacing:2px}
+#bbar{flex:1;height:2px;background:#00d4ff0d}
+#bfill{height:2px;background:#00d4ff;width:0%;transition:width .25s;box-shadow:0 0 6px #00d4ff}
+#bpct{font-size:9px;color:#00d4ffaa;min-width:34px;text-align:right}
+
+/* HUD */
+#hud { position:fixed; inset:0; pointer-events:none; z-index:100; display:none; }
+#hud.on { display:block; }
+.corner{position:absolute;width:50px;height:50px}
+.corner.tl{top:18px;left:18px;border-top:1.5px solid #00d4ff;border-left:1.5px solid #00d4ff}
+.corner.tr{top:18px;right:18px;border-top:1.5px solid #00d4ff;border-right:1.5px solid #00d4ff}
+.corner.bl{bottom:18px;left:18px;border-bottom:1.5px solid #00d4ff;border-left:1.5px solid #00d4ff}
+.corner.br{bottom:18px;right:18px;border-bottom:1.5px solid #00d4ff;border-right:1.5px solid #00d4ff}
+#xhair{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:22px;height:22px}
+#xhair::before,#xhair::after{content:'';position:absolute;background:#00d4ff88}
+#xhair::before{width:1px;height:100%;top:0;left:50%;transform:translateX(-50%)}
+#xhair::after{height:1px;width:100%;left:0;top:50%;transform:translateY(-50%)}
+.xring{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:30px;height:30px;border:1px solid #00d4ff33;border-radius:50%}
+.panel{background:rgba(0,10,25,.85);border:1px solid #00d4ff22}
+#coords{position:absolute;top:28px;left:78px;padding:12px 16px;pointer-events:none}
+#coords .lbl{font-size:8px;color:#00d4ff44;letter-spacing:3px;margin-bottom:8px}
+#coords .row{font-size:10px;color:#00d4ffcc;letter-spacing:1px;line-height:2.1}
+#swrap{position:absolute;top:28px;left:50%;transform:translateX(-50%);display:flex;pointer-events:all}
+#q{background:rgba(0,10,25,.92);border:1px solid #00d4ff33;border-right:none;color:#00d4ffcc;font-family:'Share Tech Mono',monospace;font-size:11px;padding:8px 14px;width:240px;outline:none;letter-spacing:1px}
+#q::placeholder{color:#00d4ff33} #q:focus{border-color:#00d4ff66}
+#go{background:rgba(0,212,255,.12);border:1px solid #00d4ff;color:#00d4ff;font-family:'Share Tech Mono',monospace;font-size:9px;padding:8px 14px;cursor:pointer;letter-spacing:2px;transition:background .2s}
+#go:hover{background:rgba(0,212,255,.28)}
+#layers{position:absolute;top:28px;right:78px;padding:12px;pointer-events:all;min-width:135px}
+#layers .lbl{font-size:8px;color:#00d4ff44;letter-spacing:3px;margin-bottom:10px;text-align:right}
+.lbtn{display:block;width:100%;background:transparent;border:1px solid #00d4ff22;color:#00d4ff66;font-family:'Share Tech Mono',monospace;font-size:9px;padding:6px 10px;cursor:pointer;letter-spacing:1.5px;text-align:right;margin-bottom:4px;transition:all .2s}
+.lbtn:hover{background:rgba(0,212,255,.1);border-color:#00d4ff55;color:#00d4ffcc}
+.lbtn.on{background:rgba(0,212,255,.18);border-color:#00d4ff;color:#00d4ff}
+#mmapw{position:absolute;bottom:200px;left:78px;pointer-events:none}
+#mmapw .lbl{font-size:8px;color:#00d4ff44;letter-spacing:3px;margin-bottom:6px}
+#mmap{display:block;width:130px;height:130px;border:1px solid #00d4ff33;image-rendering:pixelated}
+#nav{position:absolute;bottom:200px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:repeat(3,42px);grid-template-rows:repeat(3,42px);gap:3px;pointer-events:all}
+.nb{background:rgba(0,10,25,.85);border:1px solid #00d4ff22;color:#00d4ffaa;font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s}
+.nb:hover{background:rgba(0,212,255,.2);border-color:#00d4ff88;color:#00d4ff}
+#zctrl{position:absolute;bottom:200px;right:78px;padding:10px;pointer-events:all}
+#zctrl .lbl{font-size:8px;color:#00d4ff44;letter-spacing:3px;text-align:right;margin-bottom:4px}
+#hcon{position:absolute;bottom:52px;left:50%;transform:translateX(-50%);width:min(700px,92vw);pointer-events:all}
+#hcon-hdr{display:flex;align-items:center;justify-content:space-between;padding:5px 12px;background:rgba(0,212,255,.06);border:1px solid #00d4ff2a;border-bottom:none}
+.hctitle{font-size:8px;color:#00d4ff55;letter-spacing:3px}
+#hctog{background:transparent;border:1px solid #00d4ff1a;color:#00d4ff44;font-family:'Share Tech Mono',monospace;font-size:8px;padding:2px 8px;cursor:pointer;transition:all .2s}
+#hctog:hover{color:#00d4ffaa;border-color:#00d4ff55}
+#hlog{height:110px;overflow-y:auto;background:rgba(0,5,16,.91);border:1px solid #00d4ff2a;padding:6px 12px;display:flex;flex-direction:column;gap:1px;scroll-behavior:smooth}
+#hlog.col{display:none}
+#hcon-ftr{display:flex;align-items:center;gap:10px;padding:4px 12px;background:rgba(0,5,16,.88);border:1px solid #00d4ff18;border-top:none}
+#sbar{position:absolute;bottom:28px;left:50%;transform:translateX(-50%);font-size:9px;color:#00d4ff33;letter-spacing:2px;white-space:nowrap;pointer-events:none}
+#notif{position:absolute;top:48%;left:50%;transform:translate(-50%,-50%);background:rgba(0,10,25,.95);border:1px solid #00d4ff55;color:#00d4ff;font-size:10px;padding:10px 24px;letter-spacing:2px;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+
+/* Elevation control */
+#elev-ctrl { position:absolute; bottom:200px; right:140px; padding:10px 12px;
+  pointer-events:all; min-width:140px; }
+#elev-ctrl .lbl { font-size:8px; color:#00d4ff44; letter-spacing:3px; margin-bottom:6px; }
+#elev-ctrl .val { font-size:9px; color:#00d4ffcc; letter-spacing:1px; margin-bottom:6px; }
+#elev-slider { width:100%; accent-color:#00d4ff; cursor:pointer; }
+
+
+
+/* Overlay layers panel */
+#ovl-panel { position:absolute; left:78px; top:180px; pointer-events:all; min-width:150px; }
+#ovl-panel .lbl { font-size:8px; color:#00d4ff44; letter-spacing:3px; margin-bottom:8px; }
+.ovl-row {
+  display:flex; align-items:center; gap:8px;
+  padding:5px 4px; margin-bottom:3px; cursor:pointer;
+  transition:background .15s; border-radius:1px;
+}
+.ovl-row:hover { background:rgba(0,212,255,.07); }
+.ovl-cb {
+  appearance:none; -webkit-appearance:none;
+  width:13px; height:13px; flex-shrink:0;
+  border:1px solid #00d4ff44; background:transparent; cursor:pointer;
+  position:relative; transition:all .2s;
+}
+.ovl-cb:checked {
+  background:rgba(0,212,255,.25); border-color:#00d4ff;
+}
+.ovl-cb:checked::after {
+  content:'✓'; position:absolute; top:-2px; left:1px;
+  font-size:10px; color:#00d4ff; font-weight:bold;
+}
+.ovl-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; opacity:.55; }
+.ovl-cb:checked ~ .ovl-dot { opacity:1; box-shadow:0 0 5px currentColor; }
+.ovl-label {
+  font-family:'Share Tech Mono',monospace; font-size:9px;
+  color:#00d4ff66; letter-spacing:1.5px; flex:1;
+}
+.ovl-cb:checked ~ .ovl-dot ~ .ovl-label { color:#00d4ffcc; }
+.ovl-status { font-size:8px; color:#00d4ff33; letter-spacing:1px; margin-left:auto; }
+.ovl-row.disabled { opacity:.35; pointer-events:none; cursor:default; }
+.ovl-row.disabled .ovl-label { color:#00d4ff33; }
+.ovl-row.disabled .ovl-dot   { opacity:.2; animation:none!important; }
+
+/* Search suggestions dropdown */
+#suggest-box {
+  position:absolute; top:100%; left:0; right:0; z-index:500;
+  background:rgba(0,8,20,.97); border:1px solid #00d4ff33;
+  border-top:none; max-height:260px; overflow-y:auto; display:none;
+}
+.sug-section {
+  font-size:7px; color:#00d4ff33; letter-spacing:3px;
+  padding:6px 12px 3px; border-top:1px solid #00d4ff11;
+  text-transform:uppercase;
+}
+.sug-item {
+  display:flex; align-items:center; gap:8px;
+  padding:7px 12px; cursor:pointer; transition:background .15s;
+  font-family:'Share Tech Mono',monospace; font-size:10px; color:#00d4ffaa;
+}
+.sug-item:hover, .sug-item.active { background:rgba(0,212,255,.14); color:#00d4ff; }
+.sug-icon { font-size:11px; width:16px; text-align:center; flex-shrink:0; }
+.sug-name { flex:1; letter-spacing:.5px; }
+.sug-sub  { font-size:8px; color:#00d4ff44; letter-spacing:.5px; }
+
+/* Screenshot button */
+#screenshot-btn {
+  position:absolute; bottom:28px; left:78px; pointer-events:all;
+  background:rgba(0,10,25,.85); border:1px solid #00d4ff; color:#00d4ff;
+  font-family:'Share Tech Mono',monospace; font-size:9px;
+  padding:7px 14px; cursor:pointer; letter-spacing:2px; transition:all .2s;
+  display:flex; align-items:center; gap:7px;
+}
+#screenshot-btn:hover { background:rgba(0,212,255,.2); }
+#screenshot-btn.flash { background:rgba(0,212,255,.5); }
+
+/* North compass */
+#compass { position:absolute; top:90px; right:88px; width:36px; height:36px;
+  pointer-events:none; }
+#compass svg { width:36px; height:36px; }
+
+/* City tooltip */
+#city-tip {
+  position:fixed; pointer-events:none; z-index:200;
+  background:rgba(0,10,25,.92); border:1px solid #00d4ff;
+  padding:8px 14px; display:none; flex-direction:column; gap:3px;
+  box-shadow:0 0 20px #00d4ff33;
+  transform:translate(-50%, -110%);
+}
+#city-tip .ct-name { font-size:12px; color:#00d4ff; letter-spacing:2px; }
+#city-tip .ct-pop  { font-size:9px;  color:#00d4ff66; letter-spacing:1px; }
+#city-tip .ct-ll   { font-size:9px;  color:#00d4ff44; letter-spacing:1px; }
+#city-tip::after {  /* arrow */
+  content:''; position:absolute; bottom:-6px; left:50%;
+  transform:translateX(-50%);
+  border:6px solid transparent; border-bottom:none;
+  border-top:6px solid #00d4ff;
+}
+</style>
+</head>
+<body>
+
+<!-- Loading screen -->
+<div id="loading">
+  <div class="lgrid"></div>
+  <div class="logo">ARCVR</div>
+  <div class="sub">SPATIAL INTELLIGENCE SYSTEM v13</div>
+  <div class="ltrack"><div class="lfill" id="lbar"></div></div>
+  <div class="lmsg" id="lmsg">STARTING...</div>
+  <div id="bcon">
+    <div id="bcon-hdr">
+      <div class="bdots"><div class="bdot r"></div><div class="bdot y"></div><div class="bdot g"></div></div>
+      <div class="btitle">// SYSTEM BOOT LOG</div>
+      <span id="bstatus">● LOADING</span>
+    </div>
+    <div id="blog">
+      <div class="cl dim">────────────────────────────────────────────────────────────────</div>
+      <div class="cl info">ArcGIS VR Explorer v13 — pure Three.js, no A-Frame</div>
+    </div>
+    <div id="bftr">
+      <span class="bflbl">TILES</span>
+      <div id="bbar"><div id="bfill"></div></div>
+      <span id="bpct">0 / 0</span>
+    </div>
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="corner tl"></div><div class="corner tr"></div>
+  <div class="corner bl"></div><div class="corner br"></div>
+  <div id="xhair"><div class="xring"></div></div>
+  <div id="coords" class="panel">
+    <div class="lbl">// COORDINATES</div>
+    <div class="row" id="dlat">LAT  —</div>
+    <div class="row" id="dlon">LON  —</div>
+    <div class="row" id="dzoom">ZOOM —</div>
+    <div class="row" id="dtile">TILE —</div>
+    <div class="row" id="dlayer">MAP  SATELLITE</div>
+  </div>
+  <div id="ovl-panel" class="panel" style="padding:10px 12px">
+    <div class="lbl">// OVERLAY LAYERS</div>
+    <label class="ovl-row">
+      <input class="ovl-cb" type="checkbox" data-layer="roads"/>
+      <span class="ovl-dot" style="background:#ffcc44"></span>
+      <span class="ovl-label">ROADS</span>
+      <span class="ovl-status" id="ovl-roads-status"></span>
+    </label>
+    <label class="ovl-row">
+      <input class="ovl-cb" type="checkbox" data-layer="borders"/>
+      <span class="ovl-dot" style="background:#ffffff"></span>
+      <span class="ovl-label">BORDERS</span>
+      <span class="ovl-status" id="ovl-borders-status"></span>
+    </label>
+
+    <label class="ovl-row">
+      <input class="ovl-cb" type="checkbox" data-layer="cities" id="ovl-cities-cb"/>
+      <span class="ovl-dot" style="background:#00ffcc"></span>
+      <span class="ovl-label">CITIES</span>
+      <span class="ovl-status" id="ovl-cities-status"></span>
+    </label>
+    <label class="ovl-row">
+      <input class="ovl-cb" type="checkbox" data-layer="weather"/>
+      <span class="ovl-dot" style="background:#44ccff;animation:blink 1.4s infinite"></span>
+      <span class="ovl-label">WEATHER RADAR</span>
+      <span class="ovl-status" id="ovl-weather-status"></span>
+    </label>
+  </div>
+
+  <div id="swrap" style="position:relative">
+    <input id="q" type="text" placeholder="Search places, parks, airports…" autocomplete="off"/>
+    <button id="go">SCAN</button>
+    <div id="suggest-box"></div>
+  </div>
+  <div id="layers" class="panel">
+    <div class="lbl">// MAP LAYER</div>
+    <button class="lbtn on" data-layer="satellite">SATELLITE</button>
+    <button class="lbtn"    data-layer="topo">TOPOGRAPHIC</button>
+    <button class="lbtn"    data-layer="streets">STREET MAP</button>
+    <button class="lbtn"    data-layer="relief">SHADED RELIEF</button>
+    <button class="lbtn"    data-layer="ocean">OCEAN BASE</button>
+    <button class="lbtn"    data-layer="gray">LIGHT GRAY</button>
+  </div>
+  <div id="mmapw">
+    <div class="lbl">// OVERVIEW</div>
+    <canvas id="mmap" width="200" height="200"></canvas>
+  </div>
+  <div id="nav">
+    <div></div><button class="nb" id="nn">↑</button><div></div>
+    <button class="nb" id="nw">←</button>
+    <button class="nb" id="nc" style="font-size:9px">⊙</button>
+    <button class="nb" id="ne">→</button>
+    <div></div><button class="nb" id="ns">↓</button><div></div>
+  </div>
+  <div id="zctrl" class="panel">
+    <div class="lbl">// ZOOM</div>
+    <button class="nb" id="zin"  style="width:42px;height:42px;font-size:20px;margin-bottom:3px">+</button>
+    <button class="nb" id="zout" style="width:42px;height:42px;font-size:20px">−</button>
+  </div>
+  <div id="elev-ctrl" class="panel">
+    <div class="lbl">// ELEVATION</div>
+    <div class="val" id="elev-val">Exaggeration: 1.0×</div>
+    <input id="elev-slider" type="range" min="0" max="5" step="0.1" value="1.0"/>
+  </div>
+
+  <div id="hcon">
+    <div id="hcon-hdr">
+      <div class="bdots"><div class="bdot r"></div><div class="bdot y"></div><div class="bdot g"></div></div>
+      <div class="hctitle">// SYSTEM LOG</div>
+      <button id="hctog">HIDE ▼</button>
+    </div>
+    <div id="hlog"></div>
+    <div id="hcon-ftr">
+      <span class="bflbl">TILES</span>
+      <div id="hbar" style="flex:1;height:2px;background:#00d4ff0d">
+        <div id="hfill" style="height:2px;background:#00d4ff;width:0%;box-shadow:0 0 6px #00d4ff;transition:width .2s"></div>
+      </div>
+      <span id="hpct" style="font-size:9px;color:#00d4ffaa;min-width:50px;text-align:right">0 / 25</span>
+    </div>
+  </div>
+  <div id="sbar">ARCGIS VR EXPLORER · ARROWS=PAN · +/−=ZOOM · R=RESET · DRAG=TILT/ROTATE</div>
+  <div id="compass">
+    <svg viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="18" cy="18" r="17" fill="rgba(0,10,25,.7)" stroke="#00d4ff33" stroke-width="1"/>
+      <polygon points="18,4 21,18 18,22 15,18" fill="#ff4455" opacity="0.9"/>
+      <polygon points="18,32 21,18 18,22 15,18" fill="#00d4ff55"/>
+      <text x="18" y="9" text-anchor="middle" font-family="Share Tech Mono,monospace"
+        font-size="7" fill="#ff4455" font-weight="bold">N</text>
+    </svg>
+  </div>
+  <button id="screenshot-btn">⬡ SCREENSHOT</button>
+  <div id="notif"></div>
+  <div id="city-tip"><div class="ct-name" id="ct-name"></div><div class="ct-pop" id="ct-pop"></div><div class="ct-ll" id="ct-ll"></div></div>
+</div>
+
+<!-- Three.js canvas injected here by JS -->
+
+<script>
+'use strict';
+/* =================================================================
+   ARCGIS VR EXPLORER v13
+   Pure Three.js — no A-Frame at all.
+   Three.js r128 loaded from cdnjs above.
+   Map tiles: new Image() + crossOrigin + THREE.Texture, same method
+   that already works for the minimap canvas.
+================================================================= */
+
+var LAYERS = {
+  satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  topo:      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+  streets:   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+  relief:    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}',
+  ocean:     'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
+  gray:      'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+};
+// Terrarium elevation tiles — RGB encodes elevation in metres
+// elevation = (R*256 + G + B/256) - 32768
+var ELEV_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+var elevExaggeration = 1.0;  // vertical scale multiplier
+
+var GEOCODE = 'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates';
+var CITIES  = 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/World_Cities/FeatureServer/0/query';
+
+var FALLBACK = [
+  // Top 100 US cities by population + major regional centres
+  {name:'New York',       lat:40.7128, lon:-74.0060,  pop:8336817},
+  {name:'Los Angeles',    lat:34.0522, lon:-118.2437, pop:3979576},
+  {name:'Chicago',        lat:41.8781, lon:-87.6298,  pop:2693976},
+  {name:'Houston',        lat:29.7604, lon:-95.3698,  pop:2320268},
+  {name:'Phoenix',        lat:33.4484, lon:-112.0740, pop:1608139},
+  {name:'Philadelphia',   lat:39.9526, lon:-75.1652,  pop:1584064},
+  {name:'San Antonio',    lat:29.4241, lon:-98.4936,  pop:1547253},
+  {name:'San Diego',      lat:32.7157, lon:-117.1611, pop:1423851},
+  {name:'Dallas',         lat:32.7767, lon:-96.7970,  pop:1343573},
+  {name:'San Jose',       lat:37.3382, lon:-121.8863, pop:1021795},
+  {name:'Austin',         lat:30.2672, lon:-97.7431,  pop:978908},
+  {name:'Jacksonville',   lat:30.3322, lon:-81.6557,  pop:949611},
+  {name:'Fort Worth',     lat:32.7555, lon:-97.3308,  pop:918915},
+  {name:'Columbus',       lat:39.9612, lon:-82.9988,  pop:898553},
+  {name:'Charlotte',      lat:35.2271, lon:-80.8431,  pop:885708},
+  {name:'Indianapolis',   lat:39.7684, lon:-86.1581,  pop:876384},
+  {name:'San Francisco',  lat:37.7749, lon:-122.4194, pop:873965},
+  {name:'Seattle',        lat:47.6062, lon:-122.3321, pop:753675},
+  {name:'Denver',         lat:39.7392, lon:-104.9903, pop:715522},
+  {name:'Nashville',      lat:36.1627, lon:-86.7816,  pop:689447},
+  {name:'Oklahoma City',  lat:35.4676, lon:-97.5164,  pop:681054},
+  {name:'El Paso',        lat:31.7619, lon:-106.4850, pop:678815},
+  {name:'Washington DC',  lat:38.9072, lon:-77.0369,  pop:705749},
+  {name:'Las Vegas',      lat:36.1699, lon:-115.1398, pop:641903},
+  {name:'Louisville',     lat:38.2527, lon:-85.7585,  pop:633045},
+  {name:'Memphis',        lat:35.1495, lon:-90.0490,  pop:633104},
+  {name:'Portland',       lat:45.5051, lon:-122.6750, pop:652503},
+  {name:'Baltimore',      lat:39.2904, lon:-76.6122,  pop:585708},
+  {name:'Milwaukee',      lat:43.0389, lon:-87.9065,  pop:590157},
+  {name:'Albuquerque',    lat:35.0844, lon:-106.6504, pop:564559},
+  {name:'Tucson',         lat:32.2226, lon:-110.9747, pop:542629},
+  {name:'Fresno',         lat:36.7378, lon:-119.7871, pop:531576},
+  {name:'Sacramento',     lat:38.5816, lon:-121.4944, pop:524943},
+  {name:'Kansas City',    lat:39.0997, lon:-94.5786,  pop:495327},
+  {name:'Mesa',           lat:33.4152, lon:-111.8315, pop:504258},
+  {name:'Atlanta',        lat:33.7490, lon:-84.3880,  pop:498715},
+  {name:'Omaha',          lat:41.2565, lon:-95.9345,  pop:478192},
+  {name:'Colorado Spgs',  lat:38.8339, lon:-104.8214, pop:472688},
+  {name:'Raleigh',        lat:35.7796, lon:-78.6382,  pop:467665},
+  {name:'Long Beach',     lat:33.7701, lon:-118.1937, pop:466742},
+  {name:'Virginia Beach', lat:36.8529, lon:-75.9780,  pop:459470},
+  {name:'Minneapolis',    lat:44.9778, lon:-93.2650,  pop:429954},
+  {name:'Tampa',          lat:27.9506, lon:-82.4572,  pop:399700},
+  {name:'New Orleans',    lat:29.9511, lon:-90.0715,  pop:390845},
+  {name:'Arlington TX',   lat:32.7357, lon:-97.1081,  pop:394266},
+  {name:'Bakersfield',    lat:35.3733, lon:-119.0187, pop:384145},
+  {name:'Honolulu',       lat:21.3069, lon:-157.8583, pop:350964},
+  {name:'Anaheim',        lat:33.8366, lon:-117.9143, pop:346824},
+  {name:'Aurora CO',      lat:39.7294, lon:-104.8319, pop:366623},
+  {name:'Santa Ana',      lat:33.7455, lon:-117.8677, pop:332318},
+  {name:'Corpus Christi', lat:27.8006, lon:-97.3964,  pop:326586},
+  {name:'Riverside',      lat:33.9806, lon:-117.3755, pop:331360},
+  {name:'Lexington',      lat:38.0406, lon:-84.5037,  pop:323152},
+  {name:'St Louis',       lat:38.6270, lon:-90.1994,  pop:302838},
+  {name:'Pittsburgh',     lat:40.4406, lon:-79.9959,  pop:302971},
+  {name:'Stockton',       lat:37.9577, lon:-121.2908, pop:320804},
+  {name:'St Paul',        lat:44.9537, lon:-93.0900,  pop:308096},
+  {name:'Cincinnati',     lat:39.1031, lon:-84.5120,  pop:309317},
+  {name:'Anchorage',      lat:61.2181, lon:-149.9003, pop:291247},
+  {name:'Greensboro',     lat:36.0726, lon:-79.7920,  pop:296710},
+  {name:'Plano',          lat:33.0198, lon:-96.6989,  pop:288061},
+  {name:'Newark',         lat:40.7357, lon:-74.1724,  pop:282090},
+  {name:'Henderson NV',   lat:36.0395, lon:-114.9817, pop:320189},
+  {name:'Orlando',        lat:28.5383, lon:-81.3792,  pop:287442},
+  {name:'Chandler',       lat:33.3062, lon:-111.8413, pop:275987},
+  {name:'Laredo',         lat:27.5306, lon:-99.4803,  pop:262491},
+  {name:'Norfolk',        lat:36.8508, lon:-76.2859,  pop:244703},
+  {name:'Madison',        lat:43.0731, lon:-89.4012,  pop:269840},
+  {name:'Durham',         lat:35.9940, lon:-78.8986,  pop:278993},
+  {name:'Lubbock',        lat:33.5779, lon:-101.8552, pop:257141},
+  {name:'Winston-Salem',  lat:36.0999, lon:-80.2442,  pop:249545},
+  {name:'Garland',        lat:32.9126, lon:-96.6389,  pop:246018},
+  {name:'Glendale AZ',    lat:33.5387, lon:-112.1860, pop:248325},
+  {name:'Hialeah',        lat:25.8576, lon:-80.2781,  pop:233339},
+  {name:'Reno',           lat:39.5296, lon:-119.8138, pop:250998},
+  {name:'Baton Rouge',    lat:30.4515, lon:-91.1871,  pop:220236},
+  {name:'Irvine',         lat:33.6846, lon:-117.8265, pop:307670},
+  {name:'Chesapeake',     lat:36.7682, lon:-76.2875,  pop:249422},
+  {name:'Irving',         lat:32.8140, lon:-96.9489,  pop:239798},
+  {name:'Scottsdale',     lat:33.4942, lon:-111.9261, pop:258069},
+  {name:'North Las Vegas',lat:36.1989, lon:-115.1175, pop:262527},
+  {name:'Fremont',        lat:37.5485, lon:-121.9886, pop:234962},
+  {name:'Gilbert',        lat:33.3528, lon:-111.7890, pop:254114},
+  {name:'San Bernardino', lat:34.1083, lon:-117.2898, pop:222101},
+  {name:'Birmingham',     lat:33.5186, lon:-86.8104,  pop:212237},
+  {name:'Rochester',      lat:43.1566, lon:-77.6088,  pop:206284},
+  {name:'Spokane',        lat:47.6588, lon:-117.4260, pop:222081},
+  {name:'Des Moines',     lat:41.5868, lon:-93.6250,  pop:214237},
+  {name:'Montgomery',     lat:32.3668, lon:-86.3000,  pop:200603},
+  {name:'Modesto',        lat:37.6391, lon:-120.9969, pop:218464},
+  {name:'Fayetteville',   lat:35.0527, lon:-78.8784,  pop:211657},
+  {name:'Tacoma',         lat:47.2529, lon:-122.4443, pop:217827},
+  {name:'Akron',          lat:41.0814, lon:-81.5190,  pop:190469},
+  {name:'Yonkers',        lat:40.9312, lon:-73.8988,  pop:211569},
+  {name:'Oxnard',         lat:34.1975, lon:-119.1771, pop:202063},
+  {name:'Little Rock',    lat:34.7465, lon:-92.2896,  pop:202591},
+  {name:'Columbus GA',    lat:32.4610, lon:-84.9877,  pop:206922},
+  {name:'Sioux Falls',    lat:43.5446, lon:-96.7311,  pop:192517},
+  {name:'Rapid City',     lat:44.0805, lon:-103.2310, pop:74703},
+  {name:'Bismarck',       lat:46.8083, lon:-100.7837, pop:73622},
+  {name:'Fargo',          lat:46.8772, lon:-96.7898,  pop:125990},
+  {name:'Salt Lake City', lat:40.7608, lon:-111.8910, pop:199723},
+  {name:'Tulsa',          lat:36.1540, lon:-95.9928,  pop:401800},
+  {name:'Miami',          lat:25.7617, lon:-80.1918,  pop:470914},
+  {name:'Boston',         lat:42.3601, lon:-71.0589,  pop:692600},
+];
+
+// App state
+var S = {
+  lat:45.44, lon:-98.5, zoom:6, layer:'satellite',
+  tileX:0, tileY:0, GRID:5, TWS:55, busy:false
+};
+
+// Three.js globals
+var renderer, scene, camera, tileGroup, animId;
+var _imgPool = [];   // prevent GC of in-flight Image objects
+
+/* ══════════════════════════════════════
+   LOGGING
+══════════════════════════════════════ */
+function ts() { return new Date().toISOString().substr(11,11); }
+function clog(msg, type) {
+  type = type || 'info';
+  var pfx = {info:'['+ts()+'] ℹ ',ok:'['+ts()+'] ✓ ',
+             warn:'['+ts()+'] ⚠ ',err:'['+ts()+'] ✗ ',dim:'   '}[type]||'['+ts()+']   ';
+  ['blog','hlog'].forEach(function(id) {
+    var el = document.getElementById(id); if (!el) return;
+    var d  = document.createElement('div');
+    d.className = 'cl '+type; d.textContent = pfx+msg;
+    el.appendChild(d); el.scrollTop = el.scrollHeight;
+  });
+}
+function setPct(pct, msg) {
+  ['lbar','bfill'].forEach(function(id){ var e=document.getElementById(id); if(e) e.style.width=pct+'%'; });
+  var bp=document.getElementById('bpct'); if(bp) bp.textContent=pct+'%';
+  var lm=document.getElementById('lmsg'); if(lm&&msg) lm.textContent=msg;
+}
+var _ntTimer;
+function notify(msg) {
+  var el=document.getElementById('notif');
+  if(el){el.textContent=msg;el.style.opacity='1';}
+  clearTimeout(_ntTimer);
+  _ntTimer=setTimeout(function(){if(el)el.style.opacity='0';},3500);
+  clog(msg,'info');
+}
+
+/* ══════════════════════════════════════
+   TILE MATH
+══════════════════════════════════════ */
+function ll2tile(lat,lon,z) {
+  var n=Math.pow(2,z), x=Math.floor((lon+180)/360*n);
+  var r=lat*Math.PI/180;
+  var y=Math.floor((1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n);
+  return{x:x,y:y};
+}
+function tile2ll(tx,ty,z) {
+  var n=Math.pow(2,z),lon=tx/n*360-180;
+  var r=Math.atan(Math.sinh(Math.PI*(1-2*ty/n)));
+  return{lat:r*180/Math.PI,lon:lon};
+}
+function tileURL(tx,ty,z,layer) {
+  return (LAYERS[layer]||LAYERS.satellite).replace('{z}',z).replace('{y}',ty).replace('{x}',tx);
+}
+function ll2world(lat,lon) {
+  var n=Math.pow(2,S.zoom), tx=(lon+180)/360*n;
+  var r=lat*Math.PI/180;
+  var ty=(1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n;
+  return{x:(tx-S.tileX-.5)*S.TWS, z:(ty-S.tileY-.5)*S.TWS};
+}
+
+/* ══════════════════════════════════════
+   THREE.JS INIT
+   Creates renderer, scene, camera.
+   Returns false if WebGL unavailable.
+══════════════════════════════════════ */
+function initThree() {
+  try {
+    // Test WebGL support first
+    var testCanvas = document.createElement('canvas');
+    var gl = testCanvas.getContext('webgl') || testCanvas.getContext('experimental-webgl');
+    if (!gl) { clog('WebGL not supported in this browser/environment','err'); return false; }
+    clog('WebGL context confirmed','ok');
+
+    renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, preserveDrawingBuffer:true });
+    renderer.setPixelRatio(window.devicePixelRatio||1);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x010e1f, 1);
+    renderer.domElement.id = 'three-canvas';
+    renderer.domElement.setAttribute('tabindex','-1');
+    renderer.domElement.style.outline = 'none';
+    document.body.insertBefore(renderer.domElement, document.body.firstChild);
+    clog('Three.js renderer created ('+window.innerWidth+'×'+window.innerHeight+')','ok');
+
+    scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x010e1f, 0.002);
+
+    // Camera: height=100, z offset so -25° tilt hits map centre
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 8000);
+    camera.position.set(0, 200, 46);
+    camera.rotation.x = -Math.PI / 2;  // straight down, 2/3 south
+    clog('Camera at (0,100,214) tilt -25°','ok');
+
+    // Lights
+    scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+    var dir = new THREE.DirectionalLight(0xaaddff, 0.4);
+    dir.position.set(1,3,-1); scene.add(dir);
+
+    // Stars
+    var starGeo = new THREE.BufferGeometry();
+    var starVerts = [];
+    for (var i=0;i<2000;i++) {
+      var r=600+Math.random()*2000;
+      var phi=Math.random()*Math.PI*.45;
+      var th=Math.random()*2*Math.PI;
+      starVerts.push(r*Math.sin(phi)*Math.cos(th), r*Math.cos(phi)+60, r*Math.sin(phi)*Math.sin(th));
+    }
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts,3));
+    var starMat = new THREE.PointsMaterial({color:0x88bbff, size:1.2, sizeAttenuation:true});
+    scene.add(new THREE.Points(starGeo, starMat));
+    clog('Star field: 2000 points','ok');
+
+    // Grid lines
+    var gridMat = new THREE.LineBasicMaterial({color:0x00d4ff, transparent:true, opacity:0.18});
+    var half=Math.floor(S.GRID/2), span=(S.GRID+1)*S.TWS;
+    for (var gi=-half;gi<=half+1;gi++) {
+      var gp=gi*S.TWS;
+      var nsGeo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(gp,0.5,-span/2),new THREE.Vector3(gp,0.5,span/2)]);
+      scene.add(new THREE.Line(nsGeo,gridMat));
+      var ewGeo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-span/2,0.5,gp),new THREE.Vector3(span/2,0.5,gp)]);
+      scene.add(new THREE.Line(ewGeo,gridMat));
+    }
+
+    // Scan beam
+    var beamGeo = new THREE.PlaneGeometry(600,3);
+    var beamMat = new THREE.MeshBasicMaterial({color:0x00d4ff,transparent:true,opacity:0.05,side:THREE.DoubleSide});
+    var beam = new THREE.Mesh(beamGeo,beamMat);
+    beam.rotation.x = -Math.PI/2; beam.position.set(0,1,-300); scene.add(beam);
+    var beamDir=1, beamZ=-300;
+
+    // Tile group
+    tileGroup = new THREE.Group(); tileGroup.name='tiles'; scene.add(tileGroup);
+
+    // Render loop
+    function animate() {
+      animId = requestAnimationFrame(animate);
+      // Animate scan beam
+      beamZ += beamDir*1.2;
+      if(beamZ>300||beamZ<-300) beamDir*=-1;
+      beam.position.z = beamZ;
+      renderer.render(scene,camera);
+    }
+    animate();
+    clog('Render loop started','ok');
+
+    // Handle resize
+    window.addEventListener('resize',function(){
+      camera.aspect=window.innerWidth/window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth,window.innerHeight);
+    });
+
+    return true;
+  } catch(e) {
+    clog('initThree error: '+e.message,'err');
+    console.error(e);
+    return false;
+  }
+}
+
+/* ══════════════════════════════════════
+   MOUSE / TOUCH LOOK CONTROLS
+══════════════════════════════════════ */
+// Shared look state — flyTo can sync these after a flight
+var _look = { rotX: -Math.PI/2, rotY: 0 };
+
+function applyRot() {
+  camera.rotation.order = 'YXZ';
+  camera.rotation.x = Math.max(-Math.PI/2, Math.min(0.1, _look.rotX));
+  camera.rotation.y = _look.rotY;
+}
+
+function initControls() {
+  var isDragging=false, lastX=0, lastY=0;
+
+  document.getElementById('three-canvas').addEventListener('mousedown',function(e){
+    isDragging=true; lastX=e.clientX; lastY=e.clientY;
+  });
+  window.addEventListener('mousemove',function(e){
+    if(!isDragging) return;
+    _look.rotY -= (e.clientX-lastX)*0.003;
+    _look.rotX -= (e.clientY-lastY)*0.003;
+    lastX=e.clientX; lastY=e.clientY;
+    applyRot();
+  });
+  window.addEventListener('mouseup',function(){ if(isDragging){ var ae=document.activeElement; if(ae&&ae.id!=='q') ae.blur(); } isDragging=false; });
+
+  // Touch
+  document.getElementById('three-canvas').addEventListener('touchstart',function(e){
+    if(e.touches.length===1){
+      isDragging=true; lastX=e.touches[0].clientX; lastY=e.touches[0].clientY;
+    }
+  },{passive:true});
+  window.addEventListener('touchmove',function(e){
+    if(!isDragging||e.touches.length!==1) return;
+    _look.rotY -= (e.touches[0].clientX-lastX)*0.003;
+    _look.rotX -= (e.touches[0].clientY-lastY)*0.003;
+    lastX=e.touches[0].clientX; lastY=e.touches[0].clientY;
+    applyRot();
+  },{passive:true});
+  window.addEventListener('touchend',function(){ isDragging=false; });
+}
+
+
+/* ══════════════════════════════════════
+   CAMERA FLY-TO ANIMATION
+   Smoothly interpolates camera position
+   and tile centre over ~2 seconds using
+   an ease-in-out cubic curve.
+══════════════════════════════════════ */
+var _flyAnim = null;   // active animation handle
+
+function easeInOut(t) {
+  return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
+}
+
+function flyTo(targetLat, targetLon, targetZoom, onComplete) {
+  // Cancel any in-flight animation
+  if (_flyAnim) { cancelAnimationFrame(_flyAnim); _flyAnim = null; }
+
+  // Snap map state immediately so tiles start loading
+  S.lat = targetLat; S.lon = targetLon; S.zoom = targetZoom;
+  var t = ll2tile(targetLat, targetLon, targetZoom);
+  S.tileX = t.x; S.tileY = t.y;
+
+  // Camera start / end positions
+  var startPos = { x:camera.position.x, y:camera.position.y, z:camera.position.z };
+  var startRotX = camera.rotation.x;
+
+  // Pull camera up and back during transit, land at normal view height
+  var endPos   = { x:0, y:350, z:160 };    // high arc midpoint peak
+  var landPos  = { x:0, y:200, z:46 };     // centred L/R, 2/3 south
+  var landRotX = -Math.PI / 2;
+
+  var duration = 2000;   // ms
+  var startTime = null;
+  var phase = 'rise';    // 'rise' → go up, 'land' → come down
+
+  // Kick off tile load during flight
+  buildTilePlanes();
+  updateHUD();
+  updateMinimap();
+
+  clog('Flying to '+targetLat.toFixed(4)+', '+targetLon.toFixed(4)+'…','info');
+
+  function step(now) {
+    if (!startTime) startTime = now;
+    var elapsed = now - startTime;
+    var raw = Math.min(elapsed / duration, 1);
+    var ease = easeInOut(raw);
+
+    if (phase === 'rise') {
+      // First half: rise up to arc peak
+      var t2 = Math.min(raw * 2, 1);
+      var e2 = easeInOut(t2);
+      camera.position.x = startPos.x + (endPos.x - startPos.x) * e2;
+      camera.position.y = startPos.y + (endPos.y - startPos.y) * e2;
+      camera.position.z = startPos.z + (endPos.z - startPos.z) * e2;
+      // Tilt camera up slightly to "look forward" during rise
+      var rx = startRotX + (-10 * Math.PI/180 - startRotX) * e2;
+      camera.rotation.x = rx; _look.rotX = rx;
+
+      if (raw >= 0.5) {
+        phase = 'land';
+        startTime = now;
+        clog('  arc peak — beginning descent','info');
+      }
+    } else {
+      // Second half: descend from arc peak to landing position
+      var t3 = Math.min(raw * 2, 1);
+      var e3 = easeInOut(t3);
+      camera.position.x = endPos.x + (landPos.x - endPos.x) * e3;
+      camera.position.y = endPos.y + (landPos.y - endPos.y) * e3;
+      camera.position.z = endPos.z + (landPos.z - endPos.z) * e3;
+      var rx2 = -10 * Math.PI/180 + (landRotX - (-10*Math.PI/180)) * e3;
+      camera.rotation.x = rx2; _look.rotX = rx2;
+
+      if (t3 >= 1) {
+        camera.position.set(landPos.x, landPos.y, landPos.z);
+        camera.rotation.x = landRotX;
+        // Snap to north-up on landing
+        _look.rotX = -Math.PI / 2;
+        _look.rotY = 0;
+        applyRot();
+        _flyAnim = null;
+        clog('  landed — fly-to complete','ok');
+        if (onComplete) onComplete();
+        return;
+      }
+    }
+
+    _flyAnim = requestAnimationFrame(step);
+  }
+
+  _flyAnim = requestAnimationFrame(step);
+}
+
+/* ══════════════════════════════════════
+   TERRAIN TILES
+   For each tile:
+   1. Load Terrarium elevation PNG via Image + crossOrigin
+   2. Decode RGB → metres, displace PlaneGeometry vertices
+   3. Load ArcGIS imagery PNG, apply as texture
+   Falls back to flat plane if elevation decode fails.
+══════════════════════════════════════ */
+var SEGS = 32;   // vertex grid per tile (32×32 = 1089 verts)
+
+function decodeTerrain(imgEl) {
+  // Draw elevation image to an offscreen canvas and read pixels
+  var cnv = document.createElement('canvas');
+  cnv.width = cnv.height = SEGS + 1;
+  var ctx = cnv.getContext('2d');
+  ctx.drawImage(imgEl, 0, 0, SEGS + 1, SEGS + 1);
+  var px;
+  try {
+    px = ctx.getImageData(0, 0, SEGS + 1, SEGS + 1).data;
+  } catch(e) {
+    clog('Elevation decode blocked (CORS/taint): '+e.message,'warn');
+    return null;
+  }
+  // Terrarium: elev = R*256 + G + B/256 - 32768 (metres)
+  var elev = new Float32Array((SEGS+1)*(SEGS+1));
+  for (var i = 0; i < elev.length; i++) {
+    var r=px[i*4], g=px[i*4+1], b=px[i*4+2];
+    elev[i] = (r*256 + g + b/256) - 32768;
+  }
+  return elev;
+}
+
+function buildTileGeometry(elevData) {
+  var geo = new THREE.PlaneGeometry(S.TWS-0.2, S.TWS-0.2, SEGS, SEGS);
+  geo.rotateX(-Math.PI/2);   // lay flat before vertex displacement
+
+  if (elevData) {
+    // Find min elevation to use as baseline (sea level offset)
+    var minE = Infinity, maxE = -Infinity;
+    for (var i=0; i<elevData.length; i++) {
+      minE = Math.min(minE, elevData[i]);
+      maxE = Math.max(maxE, elevData[i]);
+    }
+    clog('  elevation range: '+Math.round(minE)+'m – '+Math.round(maxE)+'m','info');
+
+    var pos = geo.attributes.position;
+    var vcount = pos.count;
+    for (var vi = 0; vi < vcount; vi++) {
+      // Map vertex index to elevation grid
+      var col = vi % (SEGS+1);
+      var row = Math.floor(vi / (SEGS+1));
+      var ei  = row * (SEGS+1) + col;
+      var e   = (elevData[ei] - minE) * elevExaggeration * 0.012;
+      // Y is up after the rotateX; Three.js PlaneGeometry after rotateX:
+      // original Y becomes the world Y
+      pos.setY(vi, e);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+  }
+  return geo;
+}
+
+function buildTilePlanes() {
+  if (!scene || !tileGroup) { clog('Three.js scene not ready','err'); return; }
+  _building = true;
+  if (_buildTimer) clearTimeout(_buildTimer);
+  _buildTimer = setTimeout(function(){
+    _building = false;
+    clog('Build lock force-released after 30s','warn');
+  }, 30000);
+  while (tileGroup.children.length) tileGroup.remove(tileGroup.children[0]);
+  _imgPool.length = 0;
+
+  var half  = Math.floor(S.GRID/2);
+  var total = S.GRID * S.GRID;
+  var loaded = 0;
+
+  clog('Building '+total+' terrain tiles ('+SEGS+'×'+SEGS+' segments each)…','info');
+
+  for (var dy=-half; dy<=half; dy++) {
+    for (var dx=-half; dx<=half; dx++) {
+      (function(dx,dy) {
+        var tx   = S.tileX+dx, ty = S.tileY+dy;
+        var imgUrl  = tileURL(tx, ty, S.zoom, S.layer);
+        var elevUrl = ELEV_URL.replace('{z}',S.zoom).replace('{x}',tx).replace('{y}',ty);
+        var wx = dx*S.TWS, wz = dy*S.TWS;
+        var ix = dx+half+1, iy = dy+half+1;
+
+        // Placeholder flat mesh while loading
+        var placeholderGeo = new THREE.PlaneGeometry(S.TWS+0.02, S.TWS+0.02);
+        placeholderGeo.rotateX(-Math.PI/2);
+        var mat = new THREE.MeshBasicMaterial({
+          color:(dx+dy)%2===0?0x0d2a42:0x102e48,
+          side:THREE.DoubleSide,
+          polygonOffset:true,
+          polygonOffsetFactor:1,
+          polygonOffsetUnits:1
+        });
+        var mesh = new THREE.Mesh(placeholderGeo, mat);
+        mesh.position.set(wx, -0.1, wz);
+        tileGroup.add(mesh);
+
+        // Load elevation tile first, then imagery
+        var elevImg = new Image();
+        _imgPool.push(elevImg);
+        elevImg.crossOrigin = 'anonymous';
+
+        clog('→ ['+ix+','+iy+'] requesting elevation + imagery','info');
+
+        elevImg.onload = function() {
+          // Decode elevation data
+          var elevData = decodeTerrain(elevImg);
+
+          // Now load imagery tile
+          var imgEl = new Image();
+          _imgPool.push(imgEl);
+          imgEl.crossOrigin = 'anonymous';
+
+          imgEl.onload = function() {
+            try {
+              // Build displaced geometry
+              var geo = buildTileGeometry(elevData);
+
+              // Apply imagery texture
+              var tex = new THREE.Texture(imgEl);
+              tex.needsUpdate = true;
+              tex.minFilter = THREE.LinearFilter;
+              tex.generateMipmaps = false;
+              mat.map = tex;
+              mat.color.set(0xffffff);
+              mat.needsUpdate = true;
+
+              // Swap placeholder geometry for terrain geometry
+              mesh.geometry.dispose();
+              mesh.geometry = geo;
+
+              loaded++; releaseBuild(loaded,total);
+var pct = Math.round(loaded/total*100);
+              var hf=document.getElementById('hfill'), hp=document.getElementById('hpct');
+              if(hf) hf.style.width=pct+'%';
+              if(hp) hp.textContent=loaded+' / '+total;
+              clog('▶ ['+ix+','+iy+'] terrain+imagery loaded — '+loaded+'/'+total+' ('+pct+'%)','ok');
+              if(loaded===total) clog('✔ ALL '+total+' TERRAIN TILES LOADED','ok');
+            } catch(e) {
+              clog('  build error ['+ix+','+iy+']: '+e.message,'err');
+              loaded++; releaseBuild(loaded,total);
+}
+          };
+
+          imgEl.onerror = function() {
+            clog('✗ ['+ix+','+iy+'] imagery load error','err');
+            loaded++; releaseBuild(loaded,total);
+};
+
+          imgEl.src = imgUrl;
+        };
+
+        elevImg.onerror = function() {
+          clog('⚠ ['+ix+','+iy+'] elevation unavailable — using flat tile','warn');
+          // Fall back: load imagery onto flat plane
+          var imgEl = new Image();
+          _imgPool.push(imgEl);
+          imgEl.crossOrigin = 'anonymous';
+          imgEl.onload = function() {
+            try {
+              var tex = new THREE.Texture(imgEl);
+              tex.needsUpdate=true; tex.minFilter=THREE.LinearFilter; tex.generateMipmaps=false;
+              mat.map=tex; mat.color.set(0xffffff); mat.needsUpdate=true;
+              loaded++; releaseBuild(loaded,total);
+var pct=Math.round(loaded/total*100);
+              var hf=document.getElementById('hfill'),hp=document.getElementById('hpct');
+              if(hf) hf.style.width=pct+'%'; if(hp) hp.textContent=loaded+' / '+total;
+              clog('▶ ['+ix+','+iy+'] flat tile loaded — '+loaded+'/'+total,'ok');
+              if(loaded===total){ clog('✔ ALL '+total+' TILES LOADED','ok'); }
+            } catch(e){ loaded++; releaseBuild(loaded,total);
+}
+          };
+          imgEl.onerror=function(){ loaded++; releaseBuild(loaded,total);
+};
+          imgEl.src=imgUrl;
+        };
+
+        elevImg.src = elevUrl;
+      })(dx,dy);
+    }
+  }
+  clog(total+' terrain tile requests fired','ok');
+}
+
+/* Rebuild terrain with new exaggeration (called by slider) */
+function rebuildTerrain() {
+  buildTilePlanes();
+}
+
+
+
+/* ══════════════════════════════════════════════════════
+   OVERLAY LAYER SYSTEM
+   4 toggleable layers: roads, borders, cities, weather.
+   Tile layers: transparent PNG overlays above base map.
+   Feature layers: vector geometry drawn via Three.js.
+══════════════════════════════════════════════════════ */
+
+
+
+var OVERLAY_Y = { roads:2, borders:3, cities:5, weather:6 };
+
+var ovlActive  = { roads:false, borders:false, cities:true, weather:false };
+var ovlGroups  = {};   // key → THREE.Group
+
+function ovlStatus(key, txt) {
+  var el = document.getElementById('ovl-'+key+'-status');
+  if (el) el.textContent = txt;
+}
+
+/* ── Shared vector line renderer ──
+   Fetches a GeoJSON FeatureCollection from a URL and renders
+   all LineString/MultiLineString/Polygon rings as THREE.Line
+   geometry. Works for roads, borders, and time zones.
+─────────────────────────────────────── */
+function buildVectorLayer(key, url, color, yPos, label) {
+  if (!scene) return;
+  ovlStatus(key, '...');
+  if (ovlGroups[key]) { scene.remove(ovlGroups[key]); }
+  var grp = new THREE.Group(); grp.name = 'ovl-'+key;
+  ovlGroups[key] = grp;
+  scene.add(grp);
+
+  var halfW = (S.GRID/2) * S.TWS;
+  var mat   = new THREE.LineBasicMaterial({
+    color: color, transparent: true, opacity: 0.75
+  });
+
+  function addRing(coords) {
+    var pts = [];
+    for (var i=0; i<coords.length; i++) {
+      var w = ll2world(coords[i][1], coords[i][0]);
+      if (Math.abs(w.x) > halfW*1.6 || Math.abs(w.z) > halfW*1.6) {
+        // Flush any accumulated points before the gap
+        if (pts.length > 1) {
+          grp.add(new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints(pts), mat));
+        }
+        pts = [];
+        continue;
+      }
+      pts.push(new THREE.Vector3(w.x, yPos, w.z));
+    }
+    if (pts.length > 1) {
+      grp.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(pts), mat));
+    }
+  }
+
+  function processFeature(f) {
+    var g = f.geometry;
+    if (!g) return;
+    switch (g.type) {
+      case 'LineString':
+        addRing(g.coordinates); break;
+      case 'MultiLineString':
+        g.coordinates.forEach(addRing); break;
+      case 'Polygon':
+        g.coordinates.forEach(addRing); break;
+      case 'MultiPolygon':
+        g.coordinates.forEach(function(poly){poly.forEach(addRing);}); break;
+    }
+  }
+
+  var ctrl = new AbortController();
+  setTimeout(function(){ ctrl.abort(); }, 10000);
+
+  fetch(url, {signal: ctrl.signal})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var features = d.features || [];
+      features.forEach(processFeature);
+      var lines = grp.children.length;
+      ovlStatus(key, '✓ '+lines);
+      clog(label+': '+lines+' line segments drawn', 'ok');
+    })
+    .catch(function(e){
+      ovlStatus(key, '✗');
+      clog(label+' error: '+e.message, 'warn');
+    });
+}
+
+/* ── Roads: OpenStreetMap Overpass API ──
+   Overpass is free, no API key, and CORS-open from any browser.
+   Queries for motorway + trunk + primary + secondary roads within
+   the current bounding box. Falls back to a simplified line grid
+   if Overpass is rate-limited or unavailable.
+── */
+function buildRoadsLayer() {
+  if (!scene) return;
+  ovlStatus('roads', '...');
+
+  var half = Math.floor(S.GRID/2);
+  var nw   = tile2ll(S.tileX-half,   S.tileY-half,   S.zoom);
+  var se   = tile2ll(S.tileX+half+1, S.tileY+half+1, S.zoom);
+
+  // Clamp bbox to valid range
+  var s = Math.max(se.lat, -85).toFixed(5);
+  var w = Math.max(nw.lon, -180).toFixed(5);
+  var n = Math.min(nw.lat,  85).toFixed(5);
+  var e = Math.min(se.lon,  180).toFixed(5);
+
+  // Select road types based on zoom level
+  var highwayFilter = S.zoom <= 7
+    ? '["highway"~"motorway|trunk"]'
+    : S.zoom <= 9
+    ? '["highway"~"motorway|trunk|primary"]'
+    : '["highway"~"motorway|trunk|primary|secondary"]';
+
+  // Overpass QL query — returns JSON with OSM ways as line geometry
+  var query = '[out:json][timeout:25];'
+    + 'way'+highwayFilter+'('+s+','+w+','+n+','+e+');'
+    + 'out geom;';
+
+  var ctrl = new AbortController();
+  setTimeout(function(){ ctrl.abort(); }, 20000);
+
+  clog('Roads: querying Overpass OSM (bbox '+s+','+w+' → '+n+','+e+')', 'info');
+
+  fetch('https://overpass-api.de/api/interpreter', {
+    method:  'POST',
+    headers: {'Content-Type':'application/x-www-form-urlencoded'},
+    body:    'data='+encodeURIComponent(query),
+    signal:  ctrl.signal
+  })
+  .then(function(r){
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  })
+  .then(function(d){
+    if (!d.elements || d.elements.length===0) {
+      throw new Error('0 ways returned');
+    }
+    clog('Roads: '+d.elements.length+' OSM ways received', 'ok');
+    renderRoadLines(d.elements);
+  })
+  .catch(function(e){
+    clog('Roads Overpass failed: '+e.message+' — trying backup', 'warn');
+    ovlStatus('roads','..b');
+    tryEsriRoads(s, w, n, e);
+  });
+}
+
+/* Backup: ArcGIS USA_Highway_Network (public, no auth needed) */
+function tryEsriRoads(s, w, n, e) {
+  var p = new URLSearchParams({
+    where:        '1=1',
+    outFields:    'ROUTE_NUM,ROUTE_TYPE',
+    f:            'geojson',
+    geometry:     w+','+s+','+e+','+n,
+    geometryType: 'esriGeometryEnvelope',
+    spatialRel:   'esriSpatialRelIntersects',
+    inSR:  '4326', outSR: '4326',
+    resultRecordCount: '1000'
+  });
+
+  var services = [
+    'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/NTAD_National_Highway_System/FeatureServer/0',
+    'https://carto.nationalmap.gov/arcgis/rest/services/transportation/MapServer/0'
+  ];
+
+  function tryNext(idx) {
+    if (idx >= services.length) {
+      ovlStatus('roads','✗'); clog('Roads: all sources failed','warn'); return;
+    }
+    var ctrl = new AbortController(); setTimeout(function(){ctrl.abort();},10000);
+    fetch(services[idx]+'/query?'+p, {signal:ctrl.signal})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.error || !d.features || !d.features.length) throw new Error(d.error ? d.error.message : '0 features');
+        clog('Roads backup '+(idx+1)+': '+d.features.length+' features','ok');
+        // Convert GeoJSON features to Overpass-style elements for renderRoadLines
+        var elements = d.features.filter(function(f){ return f.geometry; }).map(function(f){
+          var coords = f.geometry.type==='LineString' ? [f.geometry.coordinates]
+                     : f.geometry.coordinates;
+          return { type:'way', geometry: coords.map(function(line){
+            return line.map(function(pt){ return {lat:pt[1],lon:pt[0]}; });
+          })};
+        });
+        renderRoadLines(elements);
+      })
+      .catch(function(){ tryNext(idx+1); });
+  }
+  tryNext(0);
+}
+
+function renderRoadLines(elements) {
+  if (!scene) return;
+  if (ovlGroups.roads) scene.remove(ovlGroups.roads);
+  var grp = new THREE.Group(); grp.name='ovl-roads';
+  ovlGroups.roads = grp; scene.add(grp);
+
+  var mat   = new THREE.LineBasicMaterial({color:0xffcc44, transparent:true, opacity:0.85});
+  var halfW = (S.GRID/2) * S.TWS;
+  var yPos  = OVERLAY_Y.roads;
+  var count = 0;
+
+  elements.forEach(function(el){
+    // Overpass: el.geometry = [{lat,lon}, ...]
+    // Backup:   el.geometry = [[{lat,lon},...], ...]  (array of rings)
+    var rings = el.geometry && el.geometry.length && Array.isArray(el.geometry[0])
+      ? el.geometry          // already array-of-rings
+      : [el.geometry];       // single ring
+
+    rings.forEach(function(ring){
+      if (!ring || ring.length < 2) return;
+      var pts = [];
+      ring.forEach(function(node){
+        var w = ll2world(node.lat, node.lon);
+        if (Math.abs(w.x)>halfW*1.6||Math.abs(w.z)>halfW*1.6){
+          if(pts.length>1){ grp.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),mat)); count++; }
+          pts=[]; return;
+        }
+        pts.push(new THREE.Vector3(w.x, yPos, w.z));
+      });
+      if(pts.length>1){ grp.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),mat)); count++; }
+    });
+  });
+
+  ovlStatus('roads','✓ '+count);
+  clog('Roads: '+count+' line segments rendered','ok');
+}
+
+/* ── Borders: ArcGIS World Boundaries feature service ── */
+function buildBordersLayer() {
+  var half = Math.floor(S.GRID/2);
+  var nw   = tile2ll(S.tileX-half,   S.tileY-half,   S.zoom);
+  var se   = tile2ll(S.tileX+half+1, S.tileY+half+1, S.zoom);
+
+  var p = new URLSearchParams({
+    where:       '1=1',
+    outFields:   'NAME,CNTRY_NAME,TYPE',
+    f:           'geojson',
+    geometry:    nw.lon+','+se.lat+','+se.lon+','+nw.lat,
+    geometryType:'esriGeometryEnvelope',
+    spatialRel:  'esriSpatialRelIntersects',
+    inSR:'4326', outSR:'4326',
+    resultRecordCount: '300'
+  });
+
+  // World country boundaries
+  var url = 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/World_Countries_Generalized/FeatureServer/0/query?'+p;
+  buildVectorLayer('borders', url, 0xffffff, OVERLAY_Y.borders, 'Borders');
+}
+
+
+
+/* ══════════════════════════════════════
+   CITY DATA
+══════════════════════════════════════ */
+function loadCities() {
+  var half = Math.floor(S.GRID/2);
+  var nw   = tile2ll(S.tileX-half,     S.tileY-half,     S.zoom);
+  var se   = tile2ll(S.tileX+half+1,   S.tileY+half+1,   S.zoom);
+  var p    = new URLSearchParams({
+    where:'1=1', outFields:'CITY_NAME,POP', f:'json', resultRecordCount:'60',
+    geometry:     nw.lon+','+se.lat+','+se.lon+','+nw.lat,
+    geometryType: 'esriGeometryEnvelope',
+    spatialRel:   'esriSpatialRelIntersects',
+    inSR:'4326',  outSR:'4326'
+  });
+  var ctrl = new AbortController();
+  setTimeout(function(){ ctrl.abort(); }, 7000);
+  return fetch(CITIES+'?'+p, {signal:ctrl.signal})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.features && d.features.length > 0) {
+        clog('ArcGIS cities: '+d.features.length+' in view','ok');
+        renderMarkers(d.features.map(function(f){
+          return { name:f.attributes.CITY_NAME||'', pop:f.attributes.POP||0,
+                   lat:f.geometry.y, lon:f.geometry.x };
+        }));
+      } else { throw new Error('0 features'); }
+    })
+    .catch(function(e){
+      clog('Cities fallback: '+e.message,'warn');
+      var nwlat=nw.lat, nwlon=nw.lon, selat=se.lat, selon=se.lon;
+      var vis = FALLBACK.filter(function(c){
+        return c.lat>=selat && c.lat<=nwlat && c.lon>=nwlon && c.lon<=selon;
+      });
+      clog('Fallback cities: '+vis.length+' in view', vis.length?'ok':'warn');
+      if (vis.length) renderMarkers(vis);
+    });
+}
+
+/* ══════════════════════════════════════
+   CITY MARKERS + RAYCASTING
+══════════════════════════════════════ */
+var _raycaster  = new THREE.Raycaster();
+var _mouse      = new THREE.Vector2();
+var _markerMeshes = [];
+var _hoveredMarker = null;
+
+function renderMarkers(cities) {
+  // Remove old markers
+  var toRemove = [];
+  scene.traverse(function(o){ if(o.userData.isMarker) toRemove.push(o); });
+  toRemove.forEach(function(o){ scene.remove(o); });
+  _markerMeshes = [];
+  _hoveredMarker = null;
+
+  var halfW = (S.GRID/2) * S.TWS;
+
+  cities.forEach(function(city) {
+    var w = ll2world(city.lat, city.lon);
+    if (Math.abs(w.x) > halfW*1.1 || Math.abs(w.z) > halfW*1.1) return;
+
+    // Flat pin on the surface — a small disc + dot, no extrusion
+    // Disc sits at y=1 so it floats just above the terrain
+    var disc = new THREE.Mesh(
+      new THREE.CircleGeometry(2.2, 16),
+      new THREE.MeshBasicMaterial({
+        color: 0x00ffcc, side: THREE.DoubleSide,
+        transparent: true, opacity: 0.9
+      })
+    );
+    disc.rotation.x = -Math.PI / 2;
+    disc.position.set(w.x, 1.0, w.z);
+    disc.userData.isMarker = true;
+    disc.userData.city = city;
+    scene.add(disc);
+    _markerMeshes.push({ mesh: disc, city: city });
+
+    // Outer ring for visibility
+    var ring = new THREE.Mesh(
+      new THREE.RingGeometry(2.4, 3.8, 20),
+      new THREE.MeshBasicMaterial({
+        color: 0x00d4ff, side: THREE.DoubleSide,
+        transparent: true, opacity: 0.5
+      })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(w.x, 0.8, w.z);
+    ring.userData.isMarker = true;
+    scene.add(ring);
+
+    // Tiny centre dot for precise location
+    var dot = new THREE.Mesh(
+      new THREE.CircleGeometry(0.7, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide })
+    );
+    dot.rotation.x = -Math.PI / 2;
+    dot.position.set(w.x, 1.2, w.z);
+    dot.userData.isMarker = true;
+    scene.add(dot);
+  });
+
+  clog('City markers placed: '+cities.length+' (flat pins, hover/click for details)','ok');
+
+  // Respect current cities overlay toggle
+  if (!ovlActive.cities) {
+    scene.traverse(function(o){ if(o.userData.isMarker) o.visible=false; });
+  }
+  ovlStatus('cities', ovlActive.cities ? '✓' : '');
+}
+
+function showTip(city, screenX, screenY) {
+  var tip=document.getElementById('city-tip'); if(!tip) return;
+  tip.style.display='flex'; tip.style.left=screenX+'px'; tip.style.top=screenY+'px';
+  document.getElementById('ct-name').textContent=(city.name||'').toUpperCase();
+  document.getElementById('ct-pop').textContent=city.pop?'POP  '+city.pop.toLocaleString():'';
+  document.getElementById('ct-ll').textContent=
+    Math.abs(city.lat).toFixed(3)+'°'+(city.lat>=0?'N':'S')+'  '+
+    Math.abs(city.lon).toFixed(3)+'°'+(city.lon>=0?'E':'W');
+}
+function hideTip() {
+  var tip=document.getElementById('city-tip'); if(tip) tip.style.display='none';
+  _hoveredMarker=null;
+}
+function pickMarker(clientX,clientY) {
+  var rect=renderer.domElement.getBoundingClientRect();
+  _mouse.x=((clientX-rect.left)/rect.width)*2-1;
+  _mouse.y=-((clientY-rect.top)/rect.height)*2+1;
+  _raycaster.setFromCamera(_mouse,camera);
+  var meshes=_markerMeshes.map(function(m){return m.mesh;});
+  var hits=_raycaster.intersectObjects(meshes,false);
+  return hits.length>0 ? (hits[0].object.userData.city||null) : null;
+}
+function initMarkerInteraction() {
+  var canvas=renderer.domElement;
+  canvas.addEventListener('mousemove',function(e){
+    var city=pickMarker(e.clientX,e.clientY);
+    if(city){
+      canvas.style.cursor='pointer'; _hoveredMarker=city;
+      showTip(city,e.clientX,e.clientY);
+      _markerMeshes.forEach(function(m){
+        if(m.city===city){ m.mesh.material.color.set(0xffffff); m.mesh.material.opacity=1.0; }
+      });
+    } else {
+      canvas.style.cursor=''; hideTip();
+      _markerMeshes.forEach(function(m){
+        m.mesh.material.color.set(m.mesh.userData.city ? 0x00ffcc : 0x00d4ff);
+        m.mesh.material.opacity = m.mesh.userData.baseOpacity || 0.9;
+      });
+    }
+  });
+  canvas.addEventListener('click',function(e){
+    var city=pickMarker(e.clientX,e.clientY);
+    if(city){
+      clog('City selected: '+city.name,'ok');
+      notify('FLYING TO: '+city.name.toUpperCase());
+      hideTip();
+      flyTo(city.lat,city.lon,Math.max(S.zoom,10),function(){
+        notify('ARRIVED: '+city.name.toUpperCase());
+        loadCities().catch(function(){});
+      });
+    }
+  });
+  var _tapStart={x:0,y:0,t:0};
+  canvas.addEventListener('touchstart',function(e){
+    if(e.touches.length===1) _tapStart={x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now()};
+  },{passive:true});
+  canvas.addEventListener('touchend',function(e){
+    if(e.changedTouches.length===1){
+      var dx=e.changedTouches[0].clientX-_tapStart.x, dy=e.changedTouches[0].clientY-_tapStart.y;
+      if(Math.sqrt(dx*dx+dy*dy)<10&&Date.now()-_tapStart.t<300){
+        var city=pickMarker(e.changedTouches[0].clientX,e.changedTouches[0].clientY);
+        if(city){ showTip(city,e.changedTouches[0].clientX,e.changedTouches[0].clientY);
+          setTimeout(hideTip,3000);
+          flyTo(city.lat,city.lon,Math.max(S.zoom,10),function(){
+            notify('ARRIVED: '+city.name.toUpperCase());
+            loadCities().catch(function(){});
+          });
+        }
+      }
+    }
+  },{passive:true});
+  clog('City raycasting ready','ok');
+}
+
+/* ══════════════════════════════════════
+   SCREEN → LAT/LON
+══════════════════════════════════════ */
+function screenToLatLon(clientX,clientY) {
+  try {
+    var rect=renderer.domElement.getBoundingClientRect();
+    var mouse=new THREE.Vector2(((clientX-rect.left)/rect.width)*2-1,-((clientY-rect.top)/rect.height)*2+1);
+    var ray=new THREE.Raycaster(); ray.setFromCamera(mouse,camera);
+    var plane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+    var hit=new THREE.Vector3(); ray.ray.intersectPlane(plane,hit); if(!hit) return null;
+    var n=Math.pow(2,S.zoom);
+    var tx=hit.x/S.TWS+S.tileX+0.5, ty=hit.z/S.TWS+S.tileY+0.5;
+    var lon=(tx/n)*360-180;
+    var lat=Math.atan(Math.sinh(Math.PI*(1-2*ty/n)))*180/Math.PI;
+    return{lat:lat,lon:lon};
+  } catch(e){ clog('screenToLatLon: '+e.message,'warn'); return null; }
+}
+
+/* ══════════════════════════════════════
+   SCREENSHOT
+══════════════════════════════════════ */
+function takeScreenshot() {
+  try {
+    var btn=document.getElementById('screenshot-btn');
+    if(btn){btn.classList.add('flash');setTimeout(function(){btn.classList.remove('flash');},300);}
+    renderer.render(scene,camera);
+    var threeCanvas=renderer.domElement;
+    var out=document.createElement('canvas'); out.width=threeCanvas.width; out.height=threeCanvas.height;
+    var ctx=out.getContext('2d'); ctx.drawImage(threeCanvas,0,0);
+    var pr=window.devicePixelRatio||1, pad=24*pr;
+    ctx.font=Math.round(11*pr)+'px "Share Tech Mono",monospace';
+    ctx.fillStyle='rgba(0,10,25,0.7)'; ctx.fillRect(10*pr,10*pr,220*pr,110*pr);
+    ctx.strokeStyle='rgba(0,212,255,0.4)'; ctx.lineWidth=pr;
+    ctx.strokeRect(10*pr,10*pr,220*pr,110*pr);
+    ctx.fillStyle='#00d4ff'; ctx.fillText('ARCGIS VR EXPLORER',pad,pad+14*pr);
+    ctx.fillStyle='#00d4ffaa';
+    var c2=tile2ll(S.tileX+0.5,S.tileY+0.5,S.zoom);
+    var ns=c2.lat>=0?'N':'S',ew=c2.lon>=0?'E':'W';
+    ctx.fillText('LAT  '+Math.abs(c2.lat).toFixed(4)+'° '+ns,pad,pad+32*pr);
+    ctx.fillText('LON  '+Math.abs(c2.lon).toFixed(4)+'° '+ew,pad,pad+48*pr);
+    ctx.fillText('ZOOM '+S.zoom,pad,pad+64*pr);
+    ctx.fillText('MAP  '+S.layer.toUpperCase(),pad,pad+80*pr);
+    ctx.fillStyle='#00d4ff44'; ctx.fillText(new Date().toISOString().substr(0,19).replace('T',' '),pad,pad+96*pr);
+    ctx.font=Math.round(9*pr)+'px "Share Tech Mono",monospace';
+    ctx.fillStyle='rgba(0,212,255,0.3)'; ctx.textAlign='right';
+    ctx.fillText('ArcGIS VR Explorer · Data © Esri',out.width-pad,out.height-pad);
+    var ts=new Date().toISOString().substr(0,19).replace(/[:T]/g,'-');
+    var link=document.createElement('a'); link.download='arcvr-'+ts+'.png';
+    link.href=out.toDataURL('image/png'); link.click();
+    clog('Screenshot saved: arcvr-'+ts+'.png','ok'); notify('SCREENSHOT SAVED');
+  } catch(e){ clog('Screenshot error: '+e.message,'err'); notify('SCREENSHOT FAILED'); }
+}
+
+/* ══════════════════════════════════════
+   SEARCH SUGGESTIONS
+══════════════════════════════════════ */
+var _sugTimer=null, _sugIdx=-1;
+function hideSuggestions(){
+  var box=document.getElementById('suggest-box'); if(box){box.style.display='none';box.innerHTML='';}
+  _sugIdx=-1;
+}
+function showSuggestions(q){
+  var box=document.getElementById('suggest-box'); if(!box) return;
+  if(!q||q.length<2){hideSuggestions();return;}
+  var local=searchLocalData(q), html='';
+  if(local.parks.length>0){
+    html+='<div class="sug-section">🏔 NATIONAL PARKS</div>';
+    local.parks.forEach(function(p){
+      html+='<div class="sug-item" data-lat="'+p.lat+'" data-lon="'+p.lon+'" data-label="'+p.name+'">'+
+            '<span class="sug-icon">🏕</span><span class="sug-name">'+p.name+'</span>'+
+            '<span class="sug-sub">'+p.state+'</span></div>';
+    });
+  }
+  if(local.airports.length>0){
+    html+='<div class="sug-section">✈ AIRPORTS</div>';
+    local.airports.forEach(function(a){
+      html+='<div class="sug-item" data-lat="'+a.lat+'" data-lon="'+a.lon+'" data-label="'+a.name+' ('+a.code+')">'+'<span class="sug-icon">✈</span><span class="sug-name">'+a.name+'</span><span class="sug-sub">'+a.code+'</span></div>';
+    });
+  }
+  if(!html){hideSuggestions();return;}
+  box.innerHTML=html; box.style.display='block';
+  box.querySelectorAll('.sug-item').forEach(function(el){
+    el.addEventListener('mousedown',function(e){
+      e.preventDefault();
+      var lat=parseFloat(el.dataset.lat),lon=parseFloat(el.dataset.lon),label=el.dataset.label;
+      document.getElementById('q').value=label;
+      flyToResult(lat,lon,label);
+    });
+  });
+}
+function initSearchSuggestions(){
+  var input=document.getElementById('q'); if(!input) return;
+  input.addEventListener('input',function(){ clearTimeout(_sugTimer); _sugTimer=setTimeout(function(){showSuggestions(input.value);},120); });
+  input.addEventListener('keydown',function(e){
+    var box=document.getElementById('suggest-box');
+    var items=box?box.querySelectorAll('.sug-item'):[];
+    if(e.key==='ArrowDown'){e.preventDefault();_sugIdx=Math.min(_sugIdx+1,items.length-1);items.forEach(function(it,i){it.classList.toggle('active',i===_sugIdx);});}
+    else if(e.key==='ArrowUp'){e.preventDefault();_sugIdx=Math.max(_sugIdx-1,-1);items.forEach(function(it,i){it.classList.toggle('active',i===_sugIdx);});}
+    else if(e.key==='Escape'){hideSuggestions();}
+    else if(e.key==='Enter'){if(_sugIdx>=0&&items[_sugIdx])items[_sugIdx].dispatchEvent(new MouseEvent('mousedown'));}
+  });
+  input.addEventListener('blur',function(){setTimeout(hideSuggestions,200);});
+}
+
+/* ══════════════════════════════════════
+   HUD UPDATERS
+══════════════════════════════════════ */
+function updateHUD(){
+  try{
+    var c=tile2ll(S.tileX+.5,S.tileY+.5,S.zoom);
+    var ns=c.lat>=0?'N':'S',ew=c.lon>=0?'E':'W';
+    document.getElementById('dlat').textContent ='LAT  '+Math.abs(c.lat).toFixed(4)+'° '+ns;
+    document.getElementById('dlon').textContent ='LON  '+Math.abs(c.lon).toFixed(4)+'° '+ew;
+    document.getElementById('dzoom').textContent='ZOOM '+S.zoom;
+    document.getElementById('dtile').textContent='TILE '+S.tileX+'/'+S.tileY;
+    document.getElementById('dlayer').textContent='MAP  '+S.layer.toUpperCase();
+  }catch(e){}
+}
+function updateMinimap(){
+  try{
+    var cvs=document.getElementById('mmap'); if(!cvs) return;
+    var ctx=cvs.getContext('2d');
+    var half=Math.floor(S.GRID/2),cell=200/S.GRID;
+    ctx.fillStyle='#000814'; ctx.fillRect(0,0,200,200);
+    for(var dy=-half;dy<=half;dy++){
+      for(var dx=-half;dx<=half;dx++){
+        (function(dx,dy){
+          var tx=S.tileX+dx,ty=S.tileY+dy;
+          var xi=(dx+half)*cell,yi=(dy+half)*cell;
+          var img=new Image(); img.crossOrigin='anonymous';
+          img.onload=function(){
+            ctx.drawImage(img,xi,yi,cell,cell);
+            var cx=half*cell,cy=half*cell;
+            ctx.strokeStyle='#00d4ff'; ctx.lineWidth=1.5;
+            ctx.strokeRect(cx+.5,cy+.5,cell-1,cell-1);
+            ctx.beginPath();
+            ctx.moveTo(cx+cell/2-5,cy+cell/2); ctx.lineTo(cx+cell/2+5,cy+cell/2);
+            ctx.moveTo(cx+cell/2,cy+cell/2-5); ctx.lineTo(cx+cell/2,cy+cell/2+5);
+            ctx.strokeStyle='#ff4455'; ctx.lineWidth=1; ctx.stroke();
+          };
+          img.src=tileURL(tx,ty,Math.max(4,S.zoom-1),S.layer);
+        })(dx,dy);
+      }
+    }
+  }catch(e){}
+}
+
+/* ══════════════════════════════════════
+   GEOCODING
+══════════════════════════════════════ */
+function flyToResult(lat,lon,label){
+  clog('Flying to: '+label,'ok');
+  notify('FLYING TO: '+label.toUpperCase());
+  hideSuggestions();
+  flyTo(lat,lon,S.zoom,function(){
+    notify('ARRIVED: '+label.toUpperCase());
+    loadCities().catch(function(){});
+  });
+}
+function geocode(q){
+  q=(q||'').trim(); if(!q) return;
+  var local=searchLocalData(q);
+  if(local.parks.length>0){ var pk=local.parks[0]; clog('Park: '+pk.name,'ok'); flyToResult(pk.lat,pk.lon,pk.name); return; }
+  if(local.airports.length>0){ var ap=local.airports[0]; clog('Airport: '+ap.name,'ok'); flyToResult(ap.lat,ap.lon,ap.name+' ('+ap.code+')'); return; }
+  clog('Geocoding: "'+q+'"','info');
+  var p=new URLSearchParams({SingleLine:q,f:'json',maxLocations:'1',outFields:'Match_addr'});
+  var ctrl=new AbortController(); setTimeout(function(){ctrl.abort();},9000);
+  fetch(GEOCODE+'?'+p,{signal:ctrl.signal})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d.candidates&&d.candidates.length>0){
+        flyToResult(d.candidates[0].location.y,d.candidates[0].location.x,d.candidates[0].attributes.Match_addr||q);
+      } else { clog('No candidates','warn'); notify('LOCATION NOT FOUND'); }
+    })
+    .catch(function(e){clog('Geocode: '+e.message,'err'); notify('GEOCODING UNAVAILABLE');});
+}
+
+/* ══════════════════════════════════════
+   NAVIGATION
+══════════════════════════════════════ */
+var _building=false, _buildTimer=null;
+function releaseBuild(loaded,total){
+  if(loaded>=total){ _building=false; if(_buildTimer){clearTimeout(_buildTimer);_buildTimer=null;} }
+}
+function fullRefresh(){
+  buildTilePlanes(); updateHUD(); updateMinimap();
+  refreshOverlays(); loadCities().catch(function(){});
+}
+function pan(dx,dy){
+  if(_building) return;
+  S.tileX+=dx; S.tileY+=dy;
+  var c=tile2ll(S.tileX+.5,S.tileY+.5,S.zoom); S.lat=c.lat; S.lon=c.lon;
+  clog('Pan '+(dx===1?'E':dx===-1?'W':dy===1?'S':'N')+' → '+S.tileX+'/'+S.tileY,'info');
+  fullRefresh();
+}
+function changeZoom(delta){
+  var nz=Math.max(6,Math.min(18,S.zoom+delta));
+  if(nz===S.zoom) return;
+  S.zoom=nz;
+  var t=ll2tile(S.lat,S.lon,S.zoom); S.tileX=t.x; S.tileY=t.y;
+  clog('Zoom '+(delta>0?'IN':'OUT')+' → level '+S.zoom,'info');
+  updateWeatherAvailability();
+  fullRefresh();
+}
+function resetView(){
+  S.lat=45.44; S.lon=-98.5; S.zoom=6;
+  var t=ll2tile(S.lat,S.lon,S.zoom); S.tileX=t.x; S.tileY=t.y;
+  camera.position.set(0,200,46);
+  camera.rotation.x=-Math.PI/2;
+  _look.rotX=-Math.PI/2; _look.rotY=0;
+  applyRot();
+  clog('View reset','info');
+  updateWeatherAvailability();
+  fullRefresh();
+}
+
+/* ══════════════════════════════════════
+   BOOT SEQUENCE
+══════════════════════════════════════ */
+async function initApp(){
+  try{
+    clog('DOM ready','ok');
+    clog('UA: '+navigator.userAgent.substr(0,55),'dim');
+    setPct(10,'INITIALIZING THREE.JS...');
+    var ok=initThree();
+    if(!ok){ clog('WebGL unavailable','err'); setPct(100,'WEBGL UNAVAILABLE'); return; }
+    clog('Three.js initialized','ok');
+    setPct(30,'INITIALIZING CONTROLS...');
+    initControls();
+    initMarkerInteraction();
+    initSearchSuggestions();
+    setPct(40,'LOADING TILE MAP...');
+    var t=ll2tile(S.lat,S.lon,S.zoom); S.tileX=t.x; S.tileY=t.y;
+    clog('Center: X='+S.tileX+' Y='+S.tileY+' Z='+S.zoom+' · '+S.layer,'info');
+    buildTilePlanes();
+    setPct(65,'QUERYING CITY DATA...');
+    await loadCities();
+    setPct(90,'CALIBRATING HUD...');
+    updateHUD(); updateMinimap();
+    setPct(100,'SYSTEM READY');
+    var bs=document.getElementById('bstatus');
+    if(bs){bs.textContent='● ONLINE';bs.style.color='#00ff99';}
+    clog('──────────────────────────────────────────','dim');
+    clog('ALL SYSTEMS READY','ok');
+    setTimeout(function(){
+      var ld=document.getElementById('loading');
+      if(ld){ld.classList.add('out');setTimeout(function(){try{ld.remove();}catch(e){}},1000);}
+      var hud=document.getElementById('hud'); if(hud) hud.classList.add('on');
+      initCitiesCheckbox();
+      updateWeatherAvailability();
+    },600);
+  }catch(e){
+    clog('FATAL: '+e.message,'err'); console.error(e);
+    setTimeout(function(){
+      var ld=document.getElementById('loading'); if(ld) ld.classList.add('out');
+      var hud=document.getElementById('hud'); if(hud) hud.classList.add('on');
+    },1000);
+  }
+}
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',initApp);
+} else { initApp(); }
+
+/* ══════════════════════════════════════
+   EVENT BINDINGS
+══════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded',function(){
+  document.querySelectorAll('.lbtn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      S.layer=btn.dataset.layer;
+      document.querySelectorAll('.lbtn').forEach(function(b){b.classList.remove('on');});
+      btn.classList.add('on');
+      clog('Layer → '+S.layer.toUpperCase(),'info');
+      updateHUD(); buildTilePlanes(); updateMinimap();
+    });
+  });
+  document.querySelectorAll('.ovl-cb').forEach(function(cb){
+    cb.addEventListener('change',function(){ toggleOverlay(cb.dataset.layer); });
+  });
+  document.getElementById('nn').addEventListener('click',function(){pan(0,-1);});
+  document.getElementById('ns').addEventListener('click',function(){pan(0,1);});
+  document.getElementById('nw').addEventListener('click',function(){pan(-1,0);});
+  document.getElementById('ne').addEventListener('click',function(){pan(1,0);});
+  document.getElementById('nc').addEventListener('click',resetView);
+  document.getElementById('zin').addEventListener('click',function(){changeZoom(1);});
+  document.getElementById('zout').addEventListener('click',function(){changeZoom(-1);});
+  document.getElementById('go').addEventListener('click',function(){
+    var v=document.getElementById('q').value.trim();
+    if(v){document.getElementById('q').value='';geocode(v);}
+  });
+  document.getElementById('q').addEventListener('keydown',function(e){
+    if(e.key==='Enter') document.getElementById('go').click();
+  });
+  document.getElementById('screenshot-btn').addEventListener('click',takeScreenshot);
+  document.getElementById('hctog').addEventListener('click',function(){
+    var log=document.getElementById('hlog'),tog=document.getElementById('hctog');
+    tog.textContent=log.classList.toggle('col')?'SHOW ▲':'HIDE ▼';
+  });
+  window.addEventListener('keydown',function(e){
+    var ae=document.activeElement;
+    if(ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'||ae.tagName==='SELECT')) return;
+    switch(e.key){
+      case 'ArrowUp':   e.preventDefault(); pan(0,-1);  break;
+      case 'ArrowDown': e.preventDefault(); pan(0, 1);  break;
+      case 'ArrowLeft': e.preventDefault(); pan(-1,0);  break;
+      case 'ArrowRight':e.preventDefault(); pan( 1,0);  break;
+      case '+':case '=':changeZoom( 1); break;
+      case '-':case '_':changeZoom(-1); break;
+      case 'r':case 'R':resetView();    break;
+    }
+  },true);
+});
+
+/* ══════════════════════════════════════
+   WEATHER LAYER ZOOM GUARD
+══════════════════════════════════════ */
+function updateWeatherAvailability() {
+  var cb=document.querySelector('.ovl-cb[data-layer="weather"]');
+  var row=cb?cb.closest('.ovl-row'):null;
+  if(!cb||!row) return;
+  var tooLow=S.zoom<=8;
+  if(tooLow){
+    row.classList.add('disabled'); cb.disabled=true;
+    if(ovlActive.weather){
+      ovlActive.weather=false; cb.checked=false;
+      if(ovlGroups.weather) ovlGroups.weather.visible=false;
+      clearTimeout(_weatherTimer); _weatherTimer=null;
+      ovlStatus('weather','ZOOM 9+');
+      clog('Weather disabled — need zoom 9+','warn');
+    } else { ovlStatus('weather','ZOOM 9+'); }
+  } else {
+    row.classList.remove('disabled'); cb.disabled=false;
+    var se=document.getElementById('ovl-weather-status');
+    if(se&&se.textContent==='ZOOM 9+') ovlStatus('weather','');
+  }
+}
+
+/* ══════════════════════════════════════
+   WEATHER RADAR (RainViewer)
+══════════════════════════════════════ */
+var _weatherTimer=null, _weatherImgPool=[];
+function buildWeatherLayer() {
+  if(!scene) return;
+  if(!ovlActive.weather){
+    if(ovlGroups.weather) ovlGroups.weather.visible=false;
+    ovlStatus('weather',''); return;
+  }
+  ovlStatus('weather','...');
+  clog('Weather radar: fetching latest frame…','info');
+  var ctrl=new AbortController(); setTimeout(function(){ctrl.abort();},8000);
+  fetch('https://api.rainviewer.com/public/weather-maps.json',{signal:ctrl.signal})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var past=(d.radar&&d.radar.past)||[];
+      if(!past.length) throw new Error('no frames');
+      var frame=past[past.length-1];
+      var host=d.host||'https://tilecache.rainviewer.com';
+      clog('Radar frame: '+new Date(frame.time*1000).toUTCString().substr(5,20),'info');
+      drawWeatherTiles(host,frame.path);
+    })
+    .catch(function(e){ ovlStatus('weather','✗'); clog('Weather error: '+e.message,'warn'); });
+}
+function drawWeatherTiles(host,path) {
+  if(ovlGroups.weather) scene.remove(ovlGroups.weather);
+  var grp=new THREE.Group(); grp.name='ovl-weather';
+  ovlGroups.weather=grp; scene.add(grp);
+  _weatherImgPool.length=0;
+  var half=Math.floor(S.GRID/2),total=S.GRID*S.GRID,loaded=0,yPos=OVERLAY_Y.weather;
+  for(var dy=-half;dy<=half;dy++){
+    for(var dx=-half;dx<=half;dx++){
+      (function(dx,dy){
+        var tx=S.tileX+dx,ty=S.tileY+dy;
+        var url=host+path+'/256/'+S.zoom+'/'+tx+'/'+ty+'/6/1_1.png';
+        var wx=dx*S.TWS,wz=dy*S.TWS;
+        var geo=new THREE.PlaneGeometry(S.TWS+0.02,S.TWS+0.02);
+        var mat=new THREE.MeshBasicMaterial({transparent:true,opacity:0.72,side:THREE.DoubleSide,depthWrite:false,alphaTest:0.02});
+        var mesh=new THREE.Mesh(geo,mat); mesh.rotation.x=-Math.PI/2; mesh.position.set(wx,yPos,wz);
+        grp.add(mesh);
+        var img=new Image(); _weatherImgPool.push(img); img.crossOrigin='anonymous';
+        img.onload=function(){
+          var tex=new THREE.Texture(img); tex.needsUpdate=true; tex.minFilter=THREE.LinearFilter; tex.generateMipmaps=false;
+          mat.map=tex; mat.needsUpdate=true; loaded++;
+          if(loaded===total){ ovlStatus('weather','✓ LIVE'); clog('Weather tiles loaded','ok');
+            clearTimeout(_weatherTimer);
+            _weatherTimer=setTimeout(function(){ if(ovlActive.weather){clog('Weather auto-refresh','info');buildWeatherLayer();} },5*60*1000);
+          }
+        };
+        img.onerror=function(){ loaded++; if(loaded===total) ovlStatus('weather','✓ LIVE'); };
+        img.src=url;
+      })(dx,dy);
+    }
+  }
+}
+
+/* ══════════════════════════════════════
+   CITIES OVERLAY TOGGLE
+══════════════════════════════════════ */
+function toggleCitiesLayer() {
+  var show=ovlActive.cities;
+  scene.traverse(function(o){ if(o.userData.isMarker) o.visible=show; });
+  ovlStatus('cities',show?'✓':'');
+  clog('Cities layer '+(show?'ON':'OFF'),'info');
+}
+function initCitiesCheckbox() {
+  var cb=document.getElementById('ovl-cities-cb'); if(cb) cb.checked=ovlActive.cities;
+  ovlStatus('cities','✓');
+}
+
+/* ══════════════════════════════════════
+   TOGGLE OVERLAY + REFRESH
+══════════════════════════════════════ */
+function toggleOverlay(key) {
+  ovlActive[key]=!ovlActive[key];
+  document.querySelectorAll('.ovl-cb').forEach(function(cb){
+    if(cb.dataset.layer===key) cb.checked=ovlActive[key];
+  });
+  if(!ovlActive[key]){
+    if(ovlGroups[key]) ovlGroups[key].visible=false;
+    ovlStatus(key,'');
+    clog('Layer OFF: '+key,'info');
+    if(key==='weather'){clearTimeout(_weatherTimer);_weatherTimer=null;}
+    return;
+  }
+  clog('Layer ON: '+key,'info');
+  if(key==='cities'){
+    if(ovlGroups[key]){ovlGroups[key].visible=true;ovlStatus(key,'✓');return;}
+  } else {
+    if(ovlGroups[key]){scene.remove(ovlGroups[key]);ovlGroups[key]=null;}
+  }
+  switch(key){
+    case 'roads':   buildRoadsLayer();   break;
+    case 'borders': buildBordersLayer(); break;
+    case 'cities':  toggleCitiesLayer(); break;
+    case 'weather': buildWeatherLayer(); break;
+  }
+}
+function refreshOverlays() {
+  Object.keys(ovlActive).forEach(function(key){
+    if(!ovlActive[key]) return;
+    if(key==='cities') return;
+    if(ovlGroups[key]){scene.remove(ovlGroups[key]);ovlGroups[key]=null;}
+    switch(key){
+      case 'roads':   buildRoadsLayer();   break;
+      case 'borders': buildBordersLayer(); break;
+      case 'weather': buildWeatherLayer(); break;
+    }
+  });
+}
+
+</script>
+</body>
+</html>
+
