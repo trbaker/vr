@@ -168,6 +168,27 @@ body { overflow:hidden; background:#000814; font-family:'Share Tech Mono',monosp
 .sug-name { flex:1; letter-spacing:.5px; }
 .sug-sub  { font-size:8px; color:#00d4ff44; letter-spacing:.5px; }
 
+/* VR buttons */
+#vr-enter-btn {
+  position:absolute; bottom:28px; right:78px; pointer-events:all;
+  background:rgba(0,10,25,.85); border:1px solid #00d4ff; color:#00d4ff;
+  font-family:'Share Tech Mono',monospace; font-size:9px;
+  padding:7px 16px; cursor:pointer; letter-spacing:2px; transition:all .2s;
+  display:flex; align-items:center; gap:7px;
+}
+#vr-enter-btn:hover { background:rgba(0,212,255,.2); }
+#vr-enter-btn.unavailable { opacity:.35; border-color:#00d4ff44; cursor:not-allowed; }
+
+#vr-exit-btn {
+  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+  background:rgba(0,10,25,.92); border:2px solid #ff4455; color:#ff4455;
+  font-family:'Share Tech Mono',monospace; font-size:13px;
+  padding:14px 30px; cursor:pointer; letter-spacing:3px;
+  z-index:9999; display:none; transition:all .2s;
+}
+#vr-exit-btn:hover { background:rgba(255,68,85,.2); }
+#vr-exit-btn.visible { display:block; }
+
 /* Screenshot button */
 #screenshot-btn {
   position:absolute; bottom:28px; left:78px; pointer-events:all;
@@ -335,6 +356,8 @@ body { overflow:hidden; background:#000814; font-family:'Share Tech Mono',monosp
   </div>
   <button id="screenshot-btn">⬡ SCREENSHOT</button>
   <div id="notif"></div>
+  <button id="vr-enter-btn">⊕ ENTER VR</button>
+  <button id="vr-exit-btn">⊗ EXIT VR</button>
   <div id="city-tip"><div class="ct-name" id="ct-name"></div><div class="ct-pop" id="ct-pop"></div><div class="ct-ll" id="ct-ll"></div></div>
 </div>
 
@@ -610,17 +633,19 @@ function initThree() {
     // Tile group
     tileGroup = new THREE.Group(); tileGroup.name='tiles'; scene.add(tileGroup);
 
-    // Render loop
-    function animate() {
-      animId = requestAnimationFrame(animate);
-      // Animate scan beam
+    // Enable WebXR
+    renderer.xr.enabled = true;
+    clog('WebXR enabled on renderer','ok');
+
+    // Render loop via setAnimationLoop — required for WebXR
+    // (requestAnimationFrame is paused by the browser during XR sessions)
+    renderer.setAnimationLoop(function() {
       beamZ += beamDir*1.2;
       if(beamZ>300||beamZ<-300) beamDir*=-1;
       beam.position.z = beamZ;
-      renderer.render(scene,camera);
-    }
-    animate();
-    clog('Render loop started','ok');
+      renderer.render(scene, camera);
+    });
+    clog('Render loop started (setAnimationLoop)','ok');
 
     // Handle resize
     window.addEventListener('resize',function(){
@@ -1410,6 +1435,90 @@ function initMarkerInteraction() {
   clog('City raycasting ready','ok');
 }
 
+
+/* ══════════════════════════════════════
+   WEBXR — Meta Quest / immersive-vr
+   Three.js r128 handles stereo rendering
+   automatically once xr.enabled=true and
+   a session is active. The user's head
+   tracking controls camera orientation.
+══════════════════════════════════════ */
+var _xrSession = null;
+
+function initVRButton() {
+  var btn = document.getElementById('vr-enter-btn');
+  var exitBtn = document.getElementById('vr-exit-btn');
+  if (!btn) return;
+
+  // Check WebXR availability
+  if (!navigator.xr) {
+    btn.textContent = '⊗ VR UNAVAILABLE';
+    btn.classList.add('unavailable');
+    btn.title = 'WebXR not supported in this browser';
+    clog('WebXR: navigator.xr not found — VR unavailable','warn');
+    return;
+  }
+
+  navigator.xr.isSessionSupported('immersive-vr')
+    .then(function(supported) {
+      if (supported) {
+        btn.textContent = '⊕ ENTER VR';
+        clog('WebXR: immersive-vr supported on this device','ok');
+      } else {
+        btn.textContent = '⊗ VR UNSUPPORTED';
+        btn.classList.add('unavailable');
+        clog('WebXR: immersive-vr not supported on this device','warn');
+      }
+    })
+    .catch(function() {
+      btn.classList.add('unavailable');
+    });
+}
+
+async function enterVR() {
+  if (!navigator.xr) { notify('WEBXR NOT AVAILABLE'); return; }
+
+  try {
+    var session = await navigator.xr.requestSession('immersive-vr', {
+      optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'layers']
+    });
+    _xrSession = session;
+
+    // Hand the session to Three.js renderer
+    await renderer.xr.setSession(session);
+
+    // Show exit button, hide HUD controls that don't work in VR
+    var exitBtn = document.getElementById('vr-exit-btn');
+    if (exitBtn) exitBtn.classList.add('visible');
+    document.getElementById('vr-enter-btn').style.display = 'none';
+
+    clog('WebXR session started — entering immersive VR','ok');
+    notify('ENTERING VR MODE');
+
+    // Handle session end (user removes headset or presses Quest button)
+    session.addEventListener('end', function() {
+      _xrSession = null;
+      var exitBtn = document.getElementById('vr-exit-btn');
+      if (exitBtn) exitBtn.classList.remove('visible');
+      document.getElementById('vr-enter-btn').style.display = '';
+      clog('WebXR session ended','info');
+      notify('EXITED VR MODE');
+    });
+
+  } catch(e) {
+    clog('WebXR session error: '+e.message,'err');
+    notify('VR FAILED: '+e.message.toUpperCase());
+  }
+}
+
+function exitVR() {
+  if (_xrSession) {
+    _xrSession.end();
+  } else if (renderer.xr && renderer.xr.getSession()) {
+    renderer.xr.getSession().end();
+  }
+}
+
 /* ══════════════════════════════════════
    SCREEN → LAT/LON
 ══════════════════════════════════════ */
@@ -1703,6 +1812,8 @@ document.addEventListener('DOMContentLoaded',function(){
   document.getElementById('q').addEventListener('keydown',function(e){
     if(e.key==='Enter') document.getElementById('go').click();
   });
+  document.getElementById('vr-enter-btn').addEventListener('click', enterVR);
+  document.getElementById('vr-exit-btn').addEventListener('click', exitVR);
   document.getElementById('screenshot-btn').addEventListener('click',takeScreenshot);
   document.getElementById('hctog').addEventListener('click',function(){
     var log=document.getElementById('hlog'),tog=document.getElementById('hctog');
